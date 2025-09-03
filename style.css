@@ -31,7 +31,7 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    padding: 2rem;
+    padding: 1rem; /* Adjusted padding for mobile */
 }
 
 /* App Container */
@@ -192,5 +192,30 @@ body {
 }
 .delete-btn:hover {
     color: var(--danger-hover);
+}
+
+/* Media Query for Mobile Responsiveness */
+@media (max-width: 480px) {
+    #task-form {
+        flex-direction: column;
+    }
+
+    #task-input {
+        margin-bottom: 0.5rem;
+    }
+
+    .add-btn {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .filters {
+        gap: 0.5rem;
+    }
+
+    .filter-btn {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.9rem;
+    }
 }
 
