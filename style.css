@@ -165,6 +165,7 @@ body {
     background: transparent;
     padding: 0;
     outline: none;
+    min-width: 0; /* Prevents text from overflowing */
 }
 
 .task-item .actions {
@@ -216,6 +217,22 @@ body {
     .filter-btn {
         padding: 0.4rem 0.8rem;
         font-size: 0.9rem;
+    }
+
+    .task-item {
+        padding: 0.8rem;
+    }
+
+    .task-text {
+        font-size: 0.95rem;
+    }
+
+    .task-item .actions button {
+        font-size: 1rem;
+    }
+
+    .task-item input[type="checkbox"] {
+        margin-right: 0.75rem;
     }
 }
 
