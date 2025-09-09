@@ -4,33 +4,65 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>To-Do List App</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 </head>
 <body>
+
     <div class="app-container">
-        <div class="todo-app">
-            <h1><i class="fa-solid fa-list-check"></i> To-Do List</h1>
+        <!-- Header -->
+        <header class="app-header">
+            <h1 class="logo"><i class="fa-solid fa-list-check"></i> To-Do List</h1>
+            <nav class="navigation">
+                <a href="#" id="signin-link" class="nav-link">Sign In</a>
+                <a href="#" id="signup-link" class="nav-link">Sign Up</a>
+                <button id="logout-btn" class="nav-link hide">Logout</button>
+            </nav>
+        </header>
+
+        <main>
+            <!-- Sign In Page -->
+            <section id="signin-page" class="page">
+                <h2>Sign In</h2>
+                <p id="signin-feedback" class="feedback"></p>
+                <form id="signin-form" class="auth-form">
+                    <input type="text" id="signin-username" placeholder="Username" required>
+                    <input type="password" id="signin-password" placeholder="Password" required>
+                    <button type="submit" class="auth-btn">Sign In</button>
+                    <p class="auth-switch">Don't have an account? <a href="#" id="show-signup">Sign Up</a></p>
+                </form>
+            </section>
+
+            <!-- Sign Up Page -->
+            <section id="signup-page" class="page hide">
+                <h2>Sign Up</h2>
+                <p id="signup-feedback" class="feedback"></p>
+                <form id="signup-form" class="auth-form">
+                    <input type="text" id="signup-username" placeholder="Choose a Username" required>
+                    <input type="password" id="signup-password" placeholder="Choose a Password" required>
+                    <button type="submit" class="auth-btn">Sign Up</button>
+                    <p class="auth-switch">Already have an account? <a href="#" id="show-signin">Sign In</a></p>
+                </form>
+            </section>
             
-            <!-- Task Form -->
-            <form id="task-form">
-                <input type="text" id="task-input" placeholder="Add a new task..." autocomplete="off">
-                <button type="submit" class="add-btn">Add</button>
-            </form>
-
-            <!-- Filter Buttons -->
-            <div class="filters">
-                <button class="filter-btn active" data-filter="all">All</button>
-                <button class="filter-btn" data-filter="pending">Pending</button>
-                <button class="filter-btn" data-filter="completed">Completed</button>
-            </div>
-
-            <!-- Task List -->
-            <ul id="task-list">
-                <!-- Tasks will be added here by JavaScript -->
-            </ul>
-        </div>
+            <!-- To-Do List Page -->
+            <section id="todo-page" class="page hide">
+                <form id="task-form">
+                    <input type="text" id="task-input" placeholder="Add a new task..." autocomplete="off">
+                    <button type="submit" class="add-btn">Add</button>
+                </form>
+                <div class="filters">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="pending">Pending</button>
+                    <button class="filter-btn" data-filter="completed">Completed</button>
+                </div>
+                <ul id="task-list">
+                    <!-- Tasks rendered by JS -->
+                </ul>
+            </section>
+        </main>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
