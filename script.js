@@ -1,225 +1,260 @@
-document.addEventListener('DOMContentLoaded', () => {
+// My DOM Elements
+const signinPage = document.getElementById('signin-page');
+const signupPage = document.getElementById('signup-page');
+const todoPage = document.getElementById('todo-page');
 
-    // Page & Nav Elements
-    const pages = document.querySelectorAll('.page');
-    const navLinks = {
-        signin: document.getElementById('signin-link'),
-        signup: document.getElementById('signup-link'),
-        logout: document.getElementById('logout-btn')
-    };
+const signinLink = document.getElementById('signin-link');
+const signupLink = document.getElementById('signup-link');
+const logoutBtn = document.getElementById('logout-btn');
 
-    // Auth Elements
-    const signinForm = document.getElementById('signin-form');
-    const signupForm = document.getElementById('signup-form');
-    const showSignupLink = document.getElementById('show-signup');
-    const showSigninLink = document.getElementById('show-signin');
-    const signinFeedback = document.getElementById('signin-feedback');
-    const signupFeedback = document.getElementById('signup-feedback');
+const showSignup = document.getElementById('show-signup');
+const showSignin = document.getElementById('show-signin');
 
-    // To-Do Elements
-    const taskForm = document.getElementById('task-form');
-    const taskInput = document.getElementById('task-input');
-    const taskList = document.getElementById('task-list');
-    const filterBtns = document.querySelectorAll('.filter-btn');
+const signinForm = document.getElementById('signin-form');
+const signupForm = document.getElementById('signup-form');
 
-    // App State
-    let tasks = [];
-    let currentFilter = 'all';
-    let currentUser = null;
+const signinUsernameInput = document.getElementById('signin-username');
+const signinPasswordInput = document.getElementById('signin-password');
+const signupUsernameInput = document.getElementById('signup-username');
+const signupPasswordInput = document.getElementById('signup-password');
 
-    // show a page
-    const showPage = (pageId) => {
-        pages.forEach(page => {
-            page.classList.toggle('hide', page.id !== pageId);
-        });
-    };
+const signinFeedback = document.getElementById('signin-feedback');
+const signupFeedback = document.getElementById('signup-feedback');
 
-    // show feedback message
-    const showFeedback = (element, message, type) => {
-        element.textContent = message;
-        element.className = `feedback ${type}`;
-    };
+const taskForm = document.getElementById('task-form');
+const taskInput = document.getElementById('task-input');
+const taskList = document.getElementById('task-list');
+const filterBtns = document.querySelectorAll('.filter-btn');
 
-    // update navigation visibility
-    const updateNav = () => {
-        const loggedIn = !!currentUser;
-        navLinks.signin.classList.toggle('hide', loggedIn);
-        navLinks.signup.classList.toggle('hide', loggedIn);
-        navLinks.logout.classList.toggle('hide', !loggedIn);
-    };
+// My App State
+let tasks = [];
+let currentFilter = 'all';
 
-    // save tasks to localStorage
-    const saveTasks = () => {
-        if (!currentUser) return;
-        localStorage.setItem(`tasks_${currentUser}`, JSON.stringify(tasks));
-    };
+// Page Navigation
+const showPage = (pageId) => {
+    signinPage.classList.add('hide');
+    signupPage.classList.add('hide');
+    todoPage.classList.add('hide');
 
-    // load tasks from localStorage
-    const loadTasks = () => {
-        if (!currentUser) return;
-        const savedTasks = localStorage.getItem(`tasks_${currentUser}`);
-        tasks = savedTasks ? JSON.parse(savedTasks) : [];
-    };
-    
-    // render tasks to the UI
-    const renderTasks = () => {
-        taskList.innerHTML = '';
-        const filteredTasks = tasks.filter(task => {
-            if (currentFilter === 'completed') return task.completed;
-            if (currentFilter === 'pending') return !task.completed;
-            return true;
-        });
+    document.getElementById(pageId).classList.remove('hide');
+};
 
-        if (filteredTasks.length === 0) {
-            taskList.innerHTML = '<p class="no-tasks">No tasks here!</p>';
-            return;
-        }
+// Feedback Messages
+const showFeedback = (element, message, type) => {
+    element.textContent = message;
+    element.className = 'feedback'; // Reset classes
+    element.classList.add(type);
+    element.classList.remove('hide');
+};
 
-        filteredTasks.forEach(task => {
-            const taskItem = document.createElement('li');
-            taskItem.className = `task-item ${task.completed ? 'completed' : ''}`;
-            taskItem.dataset.id = task.id;
+// Update UI based on login state
+const updateUI = () => {
+    const loggedInUser = sessionStorage.getItem('loggedInUser');
 
-            taskItem.innerHTML = `
-                <input type="checkbox" ${task.completed ? 'checked' : ''}>
-                <input type="text" class="task-text" value="${task.text}" readonly>
-                <div class="actions">
-                    <button class="edit-btn"><i class="fas fa-pencil-alt"></i></button>
-                    <button class="delete-btn"><i class="fas fa-trash"></i></button>
-                </div>
-            `;
-            taskList.appendChild(taskItem);
-        });
-    };
-
-    // handle signup
-    signupForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const username = e.target.elements['signup-username'].value.trim();
-        const password = e.target.elements['signup-password'].value.trim();
-        
-        const users = JSON.parse(localStorage.getItem('users')) || [];
-        
-        if (users.find(user => user.username === username)) {
-            showFeedback(signupFeedback, 'Username already exists!', 'error');
-            return;
-        }
-
-        users.push({ username, password });
-        localStorage.setItem('users', JSON.stringify(users));
-        showFeedback(signupFeedback, 'Account created successfully! Please sign in.', 'success');
-        signupForm.reset();
-        setTimeout(() => showPage('signin-page'), 1500);
-    });
-
-    // handle signin
-    signinForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const username = e.target.elements['signin-username'].value.trim();
-        const password = e.target.elements['signin-password'].value.trim();
-
-        const users = JSON.parse(localStorage.getItem('users')) || [];
-        const user = users.find(u => u.username === username && u.password === password);
-
-        if (user) {
-            currentUser = user.username;
-            sessionStorage.setItem('currentUser', currentUser);
-            loadTasks();
-            updateNav();
-            showPage('todo-page');
-            renderTasks();
-            signinForm.reset();
-            signinFeedback.textContent = '';
-        } else {
-            showFeedback(signinFeedback, 'Invalid username or password.', 'error');
-        }
-    });
-
-    // handle logout
-    navLinks.logout.addEventListener('click', () => {
-        currentUser = null;
-        sessionStorage.removeItem('currentUser');
-        tasks = [];
-        updateNav();
+    if (loggedInUser) {
+        signinLink.classList.add('hide');
+        signupLink.classList.add('hide');
+        logoutBtn.classList.remove('hide');
+        showPage('todo-page');
+        tasks = getTasks(loggedInUser);
+        renderTasks();
+    } else {
+        signinLink.classList.remove('hide');
+        signupLink.classList.remove('hide');
+        logoutBtn.classList.add('hide');
         showPage('signin-page');
+    }
+};
+
+// Get user-specific tasks from LocalStorage
+const getTasks = (username) => {
+    return JSON.parse(localStorage.getItem(`tasks_${username}`)) || [];
+};
+
+// Save user-specific tasks to LocalStorage
+const saveTasks = (username, tasks) => {
+    localStorage.setItem(`tasks_${username}`, JSON.stringify(tasks));
+};
+
+
+// Render Tasks
+const renderTasks = () => {
+    taskList.innerHTML = '';
+    const loggedInUser = sessionStorage.getItem('loggedInUser');
+    if (!loggedInUser) return;
+
+    const filteredTasks = tasks.filter(task => {
+        if (currentFilter === 'pending') return !task.completed;
+        if (currentFilter === 'completed') return task.completed;
+        return true; // 'all'
     });
 
-    // handle task form submission
-    taskForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const taskText = taskInput.value.trim();
-        if (taskText) {
-            const newTask = {
-                id: Date.now(),
-                text: taskText,
-                completed: false
-            };
-            tasks.push(newTask);
-            saveTasks();
-            renderTasks();
-            taskInput.value = '';
-        }
+    if (filteredTasks.length === 0) {
+        taskList.innerHTML = `<p class="no-tasks">No tasks here!</p>`;
+        return;
+    }
+
+    filteredTasks.forEach(task => {
+        const taskItem = document.createElement('li');
+        taskItem.className = `task-item ${task.completed ? 'completed' : ''}`;
+        taskItem.dataset.id = task.id;
+
+        taskItem.innerHTML = `
+            <input type="checkbox" ${task.completed ? 'checked' : ''}>
+            <input type="text" class="task-text" value="${task.text}" readonly>
+            <div class="actions">
+                <button class="edit-btn"><i class="fas fa-pencil-alt"></i></button>
+                <button class="delete-btn"><i class="fas fa-trash"></i></button>
+            </div>
+        `;
+        taskList.appendChild(taskItem);
     });
+};
 
-    // handle clicks on task list (delegation)
-    taskList.addEventListener('click', (e) => {
-        const taskItem = e.target.closest('.task-item');
-        if (!taskItem) return;
 
-        const taskId = Number(taskItem.dataset.id);
-        const task = tasks.find(t => t.id === taskId);
-        const taskTextEl = taskItem.querySelector('.task-text');
-
-        if (e.target.type === 'checkbox') {
-            task.completed = e.target.checked;
-        } else if (e.target.closest('.edit-btn')) {
-            const icon = e.target.closest('.edit-btn').querySelector('i');
-            if (taskTextEl.readOnly) {
-                taskTextEl.readOnly = false;
-                taskTextEl.focus();
-                icon.classList.replace('fa-pencil-alt', 'fa-save');
-            } else {
-                taskTextEl.readOnly = true;
-                task.text = taskTextEl.value;
-                icon.classList.replace('fa-save', 'fa-pencil-alt');
-            }
-        } else if (e.target.closest('.delete-btn')) {
-            tasks = tasks.filter(t => t.id !== taskId);
-        }
-        
-        saveTasks();
-        renderTasks();
-    });
-
-    // handle filter button clicks
-    filterBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            filterBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentFilter = btn.dataset.filter;
-            renderTasks();
-        });
-    });
-
-    // navigation links
-    showSignupLink.addEventListener('click', () => showPage('signup-page'));
-    showSigninLink.addEventListener('click', () => showPage('signin-page'));
-    navLinks.signin.addEventListener('click', () => showPage('signin-page'));
-    navLinks.signup.addEventListener('click', () => showPage('signup-page'));
-
-    // initial App Load
-    const checkSession = () => {
-        currentUser = sessionStorage.getItem('currentUser');
-        if (currentUser) {
-            loadTasks();
-            showPage('todo-page');
-        } else {
-            showPage('signin-page');
-        }
-        updateNav();
-        renderTasks();
-    };
-
-    checkSession();
+// Event Listeners
+signinLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    showPage('signin-page');
 });
+
+signupLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    showPage('signup-page');
+});
+
+showSignup.addEventListener('click', (e) => {
+    e.preventDefault();
+    showPage('signup-page');
+});
+
+showSignin.addEventListener('click', (e) => {
+    e.preventDefault();
+    showPage('signin-page');
+});
+
+
+// Sign Up Logic
+signupForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = signupUsernameInput.value.trim();
+    const password = signupPasswordInput.value.trim();
+    const users = JSON.parse(localStorage.getItem('users')) || [];
+
+    if (users.find(user => user.username === username)) {
+        showFeedback(signupFeedback, 'Username already exists!', 'error');
+        return;
+    }
+
+    users.push({ username, password });
+    localStorage.setItem('users', JSON.stringify(users));
+    showFeedback(signupFeedback, 'Account created successfully! Please sign in.', 'success');
+    signupForm.reset();
+});
+
+// Sign In Logic
+signinForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = signinUsernameInput.value.trim();
+    const password = signinPasswordInput.value.trim();
+    const users = JSON.parse(localStorage.getItem('users')) || [];
+
+    const user = users.find(u => u.username === username && u.password === password);
+
+    if (user) {
+        sessionStorage.setItem('loggedInUser', username);
+        signinForm.reset();
+        signinFeedback.classList.add('hide');
+        updateUI();
+    } else {
+        showFeedback(signinFeedback, 'Invalid username or password.', 'error');
+    }
+});
+
+
+// Logout Logic
+logoutBtn.addEventListener('click', () => {
+    sessionStorage.removeItem('loggedInUser');
+    tasks = []; // Clear current tasks
+    updateUI();
+});
+
+
+// Add Task
+taskForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const taskText = taskInput.value.trim();
+    const loggedInUser = sessionStorage.getItem('loggedInUser');
+
+    if (taskText && loggedInUser) {
+        const newTask = {
+            id: Date.now(),
+            text: taskText,
+            completed: false
+        };
+        tasks.push(newTask);
+        saveTasks(loggedInUser, tasks);
+        renderTasks();
+        taskInput.value = '';
+    }
+});
+
+
+// Edit, Delete, Complete Task
+taskList.addEventListener('click', (e) => {
+    const taskItem = e.target.closest('.task-item');
+    if (!taskItem) return;
+
+    const taskId = Number(taskItem.dataset.id);
+    const loggedInUser = sessionStorage.getItem('loggedInUser');
+    const taskTextElement = taskItem.querySelector('.task-text');
+
+    // Complete Task
+    if (e.target.type === 'checkbox') {
+        const task = tasks.find(t => t.id === taskId);
+        task.completed = e.target.checked;
+        saveTasks(loggedInUser, tasks);
+        renderTasks();
+    }
+
+    // Delete Task
+    if (e.target.closest('.delete-btn')) {
+        tasks = tasks.filter(t => t.id !== taskId);
+        saveTasks(loggedInUser, tasks);
+        renderTasks();
+    }
+
+    // Edit Task
+    if (e.target.closest('.edit-btn')) {
+        const icon = e.target.closest('.edit-btn').querySelector('i');
+        const isEditing = !taskTextElement.readOnly;
+
+        if (isEditing) {
+            taskTextElement.readOnly = true;
+            icon.classList.remove('fa-save');
+            icon.classList.add('fa-pencil-alt');
+            const task = tasks.find(t => t.id === taskId);
+            task.text = taskTextElement.value.trim();
+            saveTasks(loggedInUser, tasks);
+        } else {
+            taskTextElement.readOnly = false;
+            taskTextElement.focus();
+            icon.classList.remove('fa-pencil-alt');
+            icon.classList.add('fa-save');
+        }
+    }
+});
+
+// Filter Tasks
+filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        renderTasks();
+    });
+});
+
+// Initial Load
+document.addEventListener('DOMContentLoaded', updateUI);
 
