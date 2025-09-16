@@ -3,20 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>To-Do List App</title>
+    <title>Task Management App</title>
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Flatpickr Date Picker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <!-- My Stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="site-wrapper">
         <header class="app-header">
-            <h1 class="logo"><i class="fa-solid fa-list-check"></i> To-Do List</h1>
+            <div class="header-left">
+                <button id="back-btn" class="back-btn hide"><i class="fas fa-arrow-left"></i></button>
+                <h1 class="logo"><i class="fa-solid fa-list-check"></i> Task Manager</h1>
+            </div>
             <nav class="navigation">
                 <!-- Links shown/hidden by JS -->
                 <a href="#" id="signin-link" class="nav-link">Sign In</a>
                 <a href="#" id="signup-link" class="nav-link">Sign Up</a>
-                <button id="logout-btn" class="nav-link hide">Logout</button>
+                <div id="profile-menu" class="profile-menu hide">
+                    <img src="https://placehold.co/40x40/EFEFEF/333?text=P" alt="Profile" id="menu-profile-photo" class="menu-profile-photo">
+                    <div class="profile-dropdown">
+                        <a href="#" id="profile-link" class="dropdown-link">View Profile</a>
+                        <a href="#" id="logout-btn" class="dropdown-link">Sign Out</a>
+                    </div>
+                </div>
             </nav>
         </header>
 
@@ -45,28 +58,204 @@
                 </form>
             </section>
             
+            <!-- Profile Settings Page -->
+            <section id="profile-page" class="page hide">
+                <h2 class="form-title">Profile Settings</h2>
+                <p id="profile-feedback" class="feedback"></p>
+                <form id="profile-form">
+                    <div class="profile-photo-section">
+                        <img src="https://placehold.co/100x100/EFEFEF/333?text=Photo" alt="Profile photo preview" id="profile-photo-preview" class="profile-photo-preview">
+                        <input type="file" id="profile-photo-input" accept="image/*">
+                        <label for="profile-photo-input" class="photo-upload-btn">Change Photo</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="profile-name">Display Name</label>
+                        <input type="text" id="profile-name" placeholder="Enter your name">
+                    </div>
+
+                    <!-- Statistics Section -->
+                    <div class="settings-section">
+                        <h3>Statistics</h3>
+                        <div class="stats-container">
+                            <div class="stat-card">
+                                <h4>Total Tasks</h4>
+                                <p id="stat-total">0</p>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Completed</h4>
+                                <p id="stat-completed">0</p>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Pending</h4>
+                                <p id="stat-pending">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Appearance Section -->
+                    <div class="settings-section">
+                        <h3>Appearance</h3>
+                        <div class="form-group">
+                            <label>Theme</label>
+                            <div class="theme-switcher">
+                                <span>Light</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="theme-toggle">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span>Dark</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Accent Color</label>
+                            <div id="accent-color-picker" class="color-picker">
+                                <!-- Colors added by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                     <!-- Layout Section -->
+                    <div class="settings-section">
+                        <h3>Task Layout</h3>
+                        <div id="layout-switcher" class="layout-switcher">
+                            <label>
+                                <input type="radio" name="layout" value="list" checked> List
+                            </label>
+                            <label>
+                                <input type="radio" name="layout" value="board"> Board
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="auth-btn">Save Profile</button>
+                </form>
+            </section>
+
             <!-- To-Do List Page -->
             <section id="todo-page" class="page hide">
-                <form id="task-form">
-                    <input type="text" id="task-input" placeholder="Add a new task..." autocomplete="off">
-                    <button type="submit" class="add-btn">Add</button>
-                </form>
-                <div class="filters">
-                    <button class="filter-btn active" data-filter="all">All</button>
-                    <button class="filter-btn" data-filter="pending">Pending</button>
-                    <button class="filter-btn" data-filter="completed">Completed</button>
+                <div class="todo-header">
+                    <div class="filters-container">
+                        <div class="filters">
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="pending">Pending</button>
+                            <button class="filter-btn" data-filter="completed">Completed</button>
+                        </div>
+                        <div id="category-filters" class="category-filters">
+                            <!-- Category tags rendered here -->
+                        </div>
+                    </div>
+                    <button id="add-task-btn" class="add-task-btn"><i class="fas fa-plus"></i> Add New Task</button>
                 </div>
-                <ul id="task-list">
+                <!-- List View Container -->
+                <ul id="task-list-view" class="task-view">
                     <!-- Tasks rendered here -->
                 </ul>
+                <!-- Board View Container -->
+                <div id="task-board-view" class="task-view hide">
+                    <!-- Columns and tasks rendered here -->
+                </div>
             </section>
         </main>
     </div>
+
+    <!-- Add/Edit Task Modal -->
+    <div id="task-modal" class="modal-overlay hide">
+        <div class="modal-content">
+            <form id="task-form">
+                <input type="hidden" id="task-id">
+                <h2 id="modal-title">Add New Task</h2>
+                <input type="text" id="task-input" placeholder="Enter task title..." required>
+                
+                <div class="modal-grid">
+                    <!-- Priority -->
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="task-priority">
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+                    <!-- Deadline -->
+                    <div class="form-group">
+                        <label>Deadline</label>
+                        <div class="datetime-picker">
+                            <input type="text" id="task-deadline-date" placeholder="Select date">
+                            <input type="text" id="task-deadline-time" placeholder="Select time">
+                        </div>
+                    </div>
+                    <!-- Category -->
+                    <div class="form-group">
+                        <label>Category</label>
+                        <div class="category-group">
+                            <select id="task-category">
+                                <option value="Personal">Personal</option>
+                                <option value="Work">Work</option>
+                                <option value="Shopping">Shopping</option>
+                                <option value="Study">Study</option>
+                                <option value="custom">Custom...</option>
+                            </select>
+                            <input type="text" id="custom-category-input" class="hide" placeholder="New category name">
+                        </div>
+                    </div>
+                    <!-- Recurring -->
+                     <div class="form-group">
+                        <label>Recurring</label>
+                        <select id="task-recurring">
+                            <option value="none">None</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Sub-tasks -->
+                <div class="form-group">
+                    <label>Sub-tasks</label>
+                    <div id="subtask-list">
+                        <!-- Sub-tasks will be added here -->
+                    </div>
+                    <div class="subtask-form">
+                        <input type="text" id="subtask-input" placeholder="Add a sub-task...">
+                        <button type="button" id="add-subtask-btn" class="subtask-add-btn"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" id="modal-cancel-btn" class="modal-btn cancel-btn">Cancel</button>
+                    <button type="submit" id="modal-save-btn" class="modal-btn save-btn">Save Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Task Detail Modal -->
+    <div id="task-detail-modal" class="modal-overlay hide">
+        <div class="modal-content">
+            <h2 id="detail-task-title">Task Details</h2>
+            <div id="detail-subtask-list">
+                <!-- Sub-tasks for detail view -->
+            </div>
+            <form id="detail-subtask-form" class="subtask-form">
+                <input type="text" id="detail-subtask-input" placeholder="Add a sub-task...">
+                <button type="submit" class="subtask-add-btn"><i class="fas fa-plus"></i></button>
+            </form>
+            <div class="modal-actions">
+                <button type="button" id="detail-close-btn" class="modal-btn cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-storage-compat.js"></script>
+    <!-- Flatpickr -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <!-- My Script -->
     <script src="script.js"></script>
 </body>
 </html>
