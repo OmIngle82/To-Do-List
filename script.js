@@ -1,3 +1,4 @@
+// Firebase Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyB2sC5VOGzpFPKwWHKfchYsayGUOqZiou8",
   authDomain: "to-do-list-app-b322d.firebaseapp.com",
@@ -117,7 +118,7 @@ const showPage = (pageId) => {
 
 const showFeedback = (element, message, type) => {
     element.textContent = message;
-    element.className = 'feedback'; 
+    element.className = 'feedback';
     element.classList.add(type);
     setTimeout(() => { element.textContent = ''; element.className = 'feedback'; }, 4000);
 };
@@ -280,7 +281,7 @@ const renderCategoryFilters = () => {
     const categories = [...new Set(allTasks.map(task => task.category).filter(Boolean))];
     categoryFilters.innerHTML = '';
     const allCatBtn = document.createElement('button');
-    allCatBtn.className = 'category-btn';
+    allCatBtn.className = 'category-btn active';
     allCatBtn.textContent = 'All Categories';
     allCatBtn.dataset.filter = 'all';
     categoryFilters.appendChild(allCatBtn);
@@ -292,11 +293,11 @@ const renderCategoryFilters = () => {
         btn.dataset.filter = cat;
         categoryFilters.appendChild(btn);
     });
-
-    const currentActive = categoryFilters.querySelector('.active');
-    if (currentActive) currentActive.classList.remove('active');
-    const newActive = categoryFilters.querySelector(`[data-filter="${currentCategoryFilter}"]`);
-    if (newActive) newActive.classList.add('active');
+    
+    // This logic had a small bug, simplified it to always activate the correct button
+    categoryFilters.querySelectorAll('.category-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === currentCategoryFilter);
+    });
 };
 
 const updateTaskCounters = () => {
@@ -344,6 +345,11 @@ const openTaskModal = (task = null) => {
     taskModal.classList.remove('hide');
 };
 
+// *** FIX: Added missing function ***
+const closeTaskModal = () => {
+    taskModal.classList.add('hide');
+};
+
 const openDetailModal = (task) => {
     detailTaskId = task.id;
     detailTaskTitle.textContent = task.text;
@@ -351,6 +357,13 @@ const openDetailModal = (task) => {
     if (task.subtasks) task.subtasks.forEach(subtask => renderSubtaskInModal(subtask, detailSubtaskList, true));
     taskDetailModal.classList.remove('hide');
 };
+
+// *** FIX: Added missing function ***
+const closeDetailModal = () => {
+    taskDetailModal.classList.add('hide');
+    detailTaskId = null; // Reset the ID
+};
+
 
 const renderSubtaskInModal = (subtask, listElement, isDetailView = false) => {
     const item = document.createElement('div');
@@ -448,7 +461,7 @@ layoutSwitcher.addEventListener('change', (e) => { if (e.target.matches('input[n
 
 // Task & Modal Actions
 addTaskBtn.addEventListener('click', () => openTaskModal());
-cancelTaskBtn.addEventListener('click', () => taskModal.classList.add('hide'));
+cancelTaskBtn.addEventListener('click', () => closeTaskModal()); // Changed to call the new function
 detailCloseBtn.addEventListener('click', closeDetailModal);
 
 taskForm.addEventListener('submit', (e) => {
@@ -481,9 +494,9 @@ categorySelect.addEventListener('change', () => customCategoryInput.classList.to
 // Subtask Logic in Main Modal
 addSubtaskBtn.addEventListener('click', () => { 
     const text = subtaskInput.value.trim();
-    if (!text) return; // Prevents adding empty subtasks
+    if (!text) return;
     renderSubtaskInModal({ text: text, completed: false }, subtaskList, false); 
-    subtaskInput.value = ''; // Clear the input after adding
+    subtaskInput.value = '';
 });
 subtaskList.addEventListener('click', (e) => { if (e.target.closest('.delete-subtask-btn')) e.target.closest('.subtask-item').remove(); });
 
@@ -512,7 +525,7 @@ detailSubtaskList.addEventListener('input', (e) => { if (e.target.matches('.deta
 
 
 // Task List Actions & Filters
-taskList.addEventListener('click', (e) => {
+taskListView.addEventListener('click', (e) => {
     const taskItem = e.target.closest('.task-item');
     if (!taskItem || !currentUser) return;
     const taskId = taskItem.dataset.id;
@@ -530,6 +543,14 @@ taskList.addEventListener('click', (e) => {
         if (taskToEdit) openTaskModal(taskToEdit);
     }
 });
+taskBoardView.addEventListener('click', (e) => {
+    const taskCard = e.target.closest('.task-card-board');
+    if (!taskCard) return;
+    const taskId = taskCard.dataset.id;
+    const task = allTasks.find(t => t.id === taskId);
+    if(task) openDetailModal(task);
+});
+
 statusFilters.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { statusFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentStatusFilter = e.target.dataset.filter; renderTasks(); } });
 categoryFilters.addEventListener('click', (e) => { if (e.target.matches('.category-btn')) { if(categoryFilters.querySelector('.active')) categoryFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentCategoryFilter = e.target.dataset.filter; renderTasks(); } });
 
@@ -549,4 +570,3 @@ function shadeColor(color, percent) {
     const BB = ((B.toString(16).length === 1) ? "0" + B.toString(16) : B.toString(16));
     return "#" + RR + GG + BB;
 }
-
