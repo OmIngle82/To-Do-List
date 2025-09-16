@@ -1,3 +1,19 @@
+//Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyB2sC5VOGzpFPKwWHKfchYsayGUOqZiou8",
+  authDomain: "to-do-list-app-b322d.firebaseapp.com",
+  projectId: "to-do-list-app-b322d",
+  storageBucket: "to-do-list-app-b322d.firebasestorage.app",
+  messagingSenderId: "501063235029",
+  appId: "1:501063235029:web:fd27e3fe350b27b898f95c",
+  measurementId: "G-8ZKXR2X9X4"
+};
+
+// Initialize Firebase
+const app = firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
 // My DOM Elements
 const signinPage = document.getElementById('signin-page');
 const signupPage = document.getElementById('signup-page');
@@ -13,9 +29,9 @@ const showSignin = document.getElementById('show-signin');
 const signinForm = document.getElementById('signin-form');
 const signupForm = document.getElementById('signup-form');
 
-const signinUsernameInput = document.getElementById('signin-username');
+const signinEmailInput = document.getElementById('signin-email');
 const signinPasswordInput = document.getElementById('signin-password');
-const signupUsernameInput = document.getElementById('signup-username');
+const signupEmailInput = document.getElementById('signup-email');
 const signupPasswordInput = document.getElementById('signup-password');
 
 const signinFeedback = document.getElementById('signin-feedback');
@@ -29,13 +45,14 @@ const filterBtns = document.querySelectorAll('.filter-btn');
 // My App State
 let tasks = [];
 let currentFilter = 'all';
+let currentUser = null;
+let unsubscribe; // To stop listening for task updates when logged out
 
 // Page Navigation
 const showPage = (pageId) => {
     signinPage.classList.add('hide');
     signupPage.classList.add('hide');
     todoPage.classList.add('hide');
-
     document.getElementById(pageId).classList.remove('hide');
 };
 
@@ -45,43 +62,48 @@ const showFeedback = (element, message, type) => {
     element.className = 'feedback'; // Reset classes
     element.classList.add(type);
     element.classList.remove('hide');
+    setTimeout(() => element.classList.add('hide'), 3000); // Hide after 3 seconds
 };
 
 // Update UI based on login state
-const updateUI = () => {
-    const loggedInUser = sessionStorage.getItem('loggedInUser');
-
-    if (loggedInUser) {
+const updateUI = (user) => {
+    currentUser = user;
+    if (user) {
         signinLink.classList.add('hide');
         signupLink.classList.add('hide');
         logoutBtn.classList.remove('hide');
         showPage('todo-page');
-        tasks = getTasks(loggedInUser);
-        renderTasks();
+        listenForTasks(); // Start listening for this user's tasks
     } else {
         signinLink.classList.remove('hide');
         signupLink.classList.remove('hide');
         logoutBtn.classList.add('hide');
         showPage('signin-page');
+        if (unsubscribe) unsubscribe(); // Stop listening
+        tasks = [];
+        renderTasks();
     }
 };
 
-// Get user-specific tasks from LocalStorage
-const getTasks = (username) => {
-    return JSON.parse(localStorage.getItem(`tasks_${username}`)) || [];
+// Listen for real-time task updates from Firestore
+const listenForTasks = () => {
+    if (!currentUser) return;
+    // Detach the old listener before attaching a new one
+    if (unsubscribe) unsubscribe();
+
+    unsubscribe = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('createdAt', 'desc')
+        .onSnapshot(snapshot => {
+            tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderTasks();
+        }, error => {
+            console.error("Error fetching tasks: ", error);
+        });
 };
 
-// Save user-specific tasks to LocalStorage
-const saveTasks = (username, tasks) => {
-    localStorage.setItem(`tasks_${username}`, JSON.stringify(tasks));
-};
 
-
-// Render Tasks
+// Render Tasks to the DOM
 const renderTasks = () => {
     taskList.innerHTML = '';
-    const loggedInUser = sessionStorage.getItem('loggedInUser');
-    if (!loggedInUser) return;
 
     const filteredTasks = tasks.filter(task => {
         if (currentFilter === 'pending') return !task.completed;
@@ -112,120 +134,94 @@ const renderTasks = () => {
 };
 
 
-// Event Listeners
-signinLink.addEventListener('click', (e) => {
-    e.preventDefault();
-    showPage('signin-page');
+// --- EVENT LISTENERS ---
+
+// Page Navigation Links
+signinLink.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
+signupLink.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
+showSignup.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
+showSignin.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
+
+
+// Firebase Auth State Change Listener
+auth.onAuthStateChanged(user => {
+    updateUI(user);
 });
 
-signupLink.addEventListener('click', (e) => {
-    e.preventDefault();
-    showPage('signup-page');
-});
-
-showSignup.addEventListener('click', (e) => {
-    e.preventDefault();
-    showPage('signup-page');
-});
-
-showSignin.addEventListener('click', (e) => {
-    e.preventDefault();
-    showPage('signin-page');
-});
-
-
-// Sign Up Logic
+// Sign Up
 signupForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const username = signupUsernameInput.value.trim();
-    const password = signupPasswordInput.value.trim();
-    const users = JSON.parse(localStorage.getItem('users')) || [];
+    const email = signupEmailInput.value;
+    const password = signupPasswordInput.value;
 
-    if (users.find(user => user.username === username)) {
-        showFeedback(signupFeedback, 'Username already exists!', 'error');
-        return;
-    }
-
-    users.push({ username, password });
-    localStorage.setItem('users', JSON.stringify(users));
-    showFeedback(signupFeedback, 'Account created successfully! Please sign in.', 'success');
-    signupForm.reset();
+    auth.createUserWithEmailAndPassword(email, password)
+        .then(userCredential => {
+            showFeedback(signupFeedback, 'Account created! Please sign in.', 'success');
+            signupForm.reset();
+        })
+        .catch(error => {
+            showFeedback(signupFeedback, error.message, 'error');
+        });
 });
 
-// Sign In Logic
+// Sign In
 signinForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const username = signinUsernameInput.value.trim();
-    const password = signinPasswordInput.value.trim();
-    const users = JSON.parse(localStorage.getItem('users')) || [];
+    const email = signinEmailInput.value;
+    const password = signinPasswordInput.value;
 
-    const user = users.find(u => u.username === username && u.password === password);
-
-    if (user) {
-        sessionStorage.setItem('loggedInUser', username);
-        signinForm.reset();
-        signinFeedback.classList.add('hide');
-        updateUI();
-    } else {
-        showFeedback(signinFeedback, 'Invalid username or password.', 'error');
-    }
+    auth.signInWithEmailAndPassword(email, password)
+        .then(userCredential => {
+            signinForm.reset();
+            signinFeedback.classList.add('hide');
+            // The onAuthStateChanged listener will handle the UI update
+        })
+        .catch(error => {
+            showFeedback(signinFeedback, error.message, 'error');
+        });
 });
 
-
-// Logout Logic
+// Logout
 logoutBtn.addEventListener('click', () => {
-    sessionStorage.removeItem('loggedInUser');
-    tasks = []; // Clear current tasks
-    updateUI();
+    auth.signOut();
 });
-
 
 // Add Task
 taskForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const taskText = taskInput.value.trim();
-    const loggedInUser = sessionStorage.getItem('loggedInUser');
 
-    if (taskText && loggedInUser) {
-        const newTask = {
-            id: Date.now(),
+    if (taskText && currentUser) {
+        db.collection('users').doc(currentUser.uid).collection('tasks').add({
             text: taskText,
-            completed: false
-        };
-        tasks.push(newTask);
-        saveTasks(loggedInUser, tasks);
-        renderTasks();
+            completed: false,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
         taskInput.value = '';
     }
 });
 
-
 // Edit, Delete, Complete Task
 taskList.addEventListener('click', (e) => {
     const taskItem = e.target.closest('.task-item');
-    if (!taskItem) return;
+    if (!taskItem || !currentUser) return;
 
-    const taskId = Number(taskItem.dataset.id);
-    const loggedInUser = sessionStorage.getItem('loggedInUser');
-    const taskTextElement = taskItem.querySelector('.task-text');
+    const taskId = taskItem.dataset.id;
+    const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
 
     // Complete Task
     if (e.target.type === 'checkbox') {
-        const task = tasks.find(t => t.id === taskId);
-        task.completed = e.target.checked;
-        saveTasks(loggedInUser, tasks);
-        renderTasks();
+        taskRef.update({ completed: e.target.checked });
     }
 
     // Delete Task
     if (e.target.closest('.delete-btn')) {
-        tasks = tasks.filter(t => t.id !== taskId);
-        saveTasks(loggedInUser, tasks);
-        renderTasks();
+        taskRef.delete();
     }
 
     // Edit Task
     if (e.target.closest('.edit-btn')) {
+        const taskTextElement = taskItem.querySelector('.task-text');
         const icon = e.target.closest('.edit-btn').querySelector('i');
         const isEditing = !taskTextElement.readOnly;
 
@@ -233,9 +229,7 @@ taskList.addEventListener('click', (e) => {
             taskTextElement.readOnly = true;
             icon.classList.remove('fa-save');
             icon.classList.add('fa-pencil-alt');
-            const task = tasks.find(t => t.id === taskId);
-            task.text = taskTextElement.value.trim();
-            saveTasks(loggedInUser, tasks);
+            taskRef.update({ text: taskTextElement.value.trim() });
         } else {
             taskTextElement.readOnly = false;
             taskTextElement.focus();
@@ -254,7 +248,4 @@ filterBtns.forEach(btn => {
         renderTasks();
     });
 });
-
-// Initial Load
-document.addEventListener('DOMContentLoaded', updateUI);
 
