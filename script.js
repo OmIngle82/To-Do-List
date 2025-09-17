@@ -9,7 +9,7 @@ const firebaseConfig = {
   measurementId: "G-8ZKXR2X9X4"
 };
 
-// Initialize Firebase
+// My Firebase Initialization
 const app = firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -67,10 +67,10 @@ const deadlineDateInput = document.getElementById('task-deadline-date');
 const deadlineTimeInput = document.getElementById('task-deadline-time');
 const categorySelect = document.getElementById('task-category');
 const customCategoryInput = document.getElementById('custom-category-input');
+const subtaskForm = document.getElementById('subtask-form');
 const subtaskInput = document.getElementById('subtask-input');
 const subtaskList = document.getElementById('subtask-list');
 const recurringSelect = document.getElementById('task-recurring');
-const addSubtaskBtn = document.getElementById('add-subtask-btn');
 const cancelTaskBtn = document.getElementById('modal-cancel-btn');
 // Task Detail Modal
 const taskDetailModal = document.getElementById('task-detail-modal');
@@ -97,11 +97,9 @@ let unsubscribeTasks, unsubscribeProfile;
 
 const accentColors = ['#d4a373', '#f07167', '#00afb9', '#9d4edd', '#fb8500'];
 
-// Initialize Date Pickers
+// Date Picker Initialization
 const datePicker = flatpickr(deadlineDateInput, { dateFormat: "Y-m-d" });
 const timePicker = flatpickr(deadlineTimeInput, { enableTime: true, noCalendar: true, dateFormat: "H:i" });
-
-// --- CORE FUNCTIONS ---
 
 // Page & UI Management
 const showPage = (pageId) => {
@@ -138,7 +136,7 @@ const updateUIforLoginState = (user) => {
         if (unsubscribeTasks) unsubscribeTasks();
         if (unsubscribeProfile) unsubscribeProfile();
         allTasks = [];
-        applyUserPreferences({}); // Reset to default
+        applyUserPreferences({});
         renderTasks();
     }
 };
@@ -150,28 +148,20 @@ const applyUserPreferences = (prefs = {}) => {
         accentColor: '#d4a373',
         ...prefs
     };
-
-    // Theme
     document.body.classList.toggle('dark-theme', userPreferences.theme === 'dark');
     themeToggle.checked = userPreferences.theme === 'dark';
-    
-    // Layout
     const layoutInput = document.querySelector(`input[name="layout"][value="${userPreferences.layout}"]`);
     if(layoutInput) layoutInput.checked = true;
     taskListView.classList.toggle('hide', userPreferences.layout !== 'list');
     taskBoardView.classList.toggle('hide', userPreferences.layout !== 'board');
-    
-    // Accent Color
     document.documentElement.style.setProperty('--primary-color', userPreferences.accentColor);
     document.documentElement.style.setProperty('--primary-hover', shadeColor(userPreferences.accentColor, -15));
-    
-    // Update color picker UI
     accentColorPicker.querySelectorAll('.color-swatch').forEach(swatch => {
         swatch.classList.toggle('active', swatch.dataset.color === userPreferences.accentColor);
     });
 };
 
-// Data Listeners (Firebase)
+// Data Listeners for Firebase
 const listenForProfile = () => {
     if (!currentUser) return;
     if (unsubscribeProfile) unsubscribeProfile();
@@ -199,7 +189,7 @@ const listenForTasks = () => {
         });
 };
 
-// --- RENDER FUNCTIONS ---
+// Render Functions for UI
 const renderTasks = () => {
     if (userPreferences.layout === 'list') {
         renderListView();
@@ -281,7 +271,7 @@ const renderCategoryFilters = () => {
     const categories = [...new Set(allTasks.map(task => task.category).filter(Boolean))];
     categoryFilters.innerHTML = '';
     const allCatBtn = document.createElement('button');
-    allCatBtn.className = 'category-btn active';
+    allCatBtn.className = 'category-btn';
     allCatBtn.textContent = 'All Categories';
     allCatBtn.dataset.filter = 'all';
     categoryFilters.appendChild(allCatBtn);
@@ -293,11 +283,11 @@ const renderCategoryFilters = () => {
         btn.dataset.filter = cat;
         categoryFilters.appendChild(btn);
     });
-    
-    // This logic had a small bug, simplified it to always activate the correct button
-    categoryFilters.querySelectorAll('.category-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.filter === currentCategoryFilter);
-    });
+
+    const currentActive = categoryFilters.querySelector('.active');
+    if (currentActive) currentActive.classList.remove('active');
+    const newActive = categoryFilters.querySelector(`[data-filter="${currentCategoryFilter}"]`);
+    if (newActive) newActive.classList.add('active');
 };
 
 const updateTaskCounters = () => {
@@ -308,7 +298,7 @@ const updateTaskCounters = () => {
     statPending.textContent = total - completed;
 };
 
-// --- MODAL FUNCTIONS ---
+// Modal Functions
 const openTaskModal = (task = null) => {
     taskForm.reset();
     subtaskList.innerHTML = '';
@@ -345,11 +335,6 @@ const openTaskModal = (task = null) => {
     taskModal.classList.remove('hide');
 };
 
-// *** FIX: Added missing function ***
-const closeTaskModal = () => {
-    taskModal.classList.add('hide');
-};
-
 const openDetailModal = (task) => {
     detailTaskId = task.id;
     detailTaskTitle.textContent = task.text;
@@ -357,13 +342,6 @@ const openDetailModal = (task) => {
     if (task.subtasks) task.subtasks.forEach(subtask => renderSubtaskInModal(subtask, detailSubtaskList, true));
     taskDetailModal.classList.remove('hide');
 };
-
-// *** FIX: Added missing function ***
-const closeDetailModal = () => {
-    taskDetailModal.classList.add('hide');
-    detailTaskId = null; // Reset the ID
-};
-
 
 const renderSubtaskInModal = (subtask, listElement, isDetailView = false) => {
     const item = document.createElement('div');
@@ -395,7 +373,7 @@ const saveSubtasksFromDetail = () => {
     db.collection('users').doc(currentUser.uid).collection('tasks').doc(detailTaskId).update({ subtasks });
 };
 
-// --- EVENT LISTENERS ---
+// Event Listeners
 // Initialize color picker
 accentColors.forEach(color => {
     const swatch = document.createElement('div');
@@ -440,29 +418,31 @@ signinForm.addEventListener('submit', (e) => {
 profileForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!currentUser) return;
-    db.collection('users').doc(currentUser.uid).update({
+    db.collection('users').doc(currentUser.uid).set({
         displayName: displayNameInput.value,
         preferences: userPreferences
-    }).then(() => {
+    }, { merge: true }).then(() => {
         showFeedback(profileFeedback, "Profile saved!", "success");
     }).catch(error => {
         showFeedback(profileFeedback, error.message, "error");
     });
 });
+
 profilePhotoInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file || !currentUser) return;
     const ref = storage.ref(`profile_photos/${currentUser.uid}/${file.name}`);
-    ref.put(file).then(snapshot => snapshot.ref.getDownloadURL().then(url => db.collection('users').doc(currentUser.uid).update({ photoURL: url })));
+    ref.put(file).then(snapshot => snapshot.ref.getDownloadURL().then(url => db.collection('users').doc(currentUser.uid).set({ photoURL: url }, { merge: true })));
 });
+
 themeToggle.addEventListener('change', (e) => { userPreferences.theme = e.target.checked ? 'dark' : 'light'; applyUserPreferences(userPreferences); });
 accentColorPicker.addEventListener('click', (e) => { if (e.target.matches('.color-swatch')) { userPreferences.accentColor = e.target.dataset.color; applyUserPreferences(userPreferences); } });
 layoutSwitcher.addEventListener('change', (e) => { if (e.target.matches('input[name="layout"]')) { userPreferences.layout = e.target.value; applyUserPreferences(userPreferences); renderTasks(); } });
 
 // Task & Modal Actions
 addTaskBtn.addEventListener('click', () => openTaskModal());
-cancelTaskBtn.addEventListener('click', () => closeTaskModal()); // Changed to call the new function
-detailCloseBtn.addEventListener('click', closeDetailModal);
+cancelTaskBtn.addEventListener('click', () => taskModal.classList.add('hide'));
+detailCloseBtn.addEventListener('click', () => taskDetailModal.classList.add('hide'));
 
 taskForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -492,7 +472,8 @@ taskForm.addEventListener('submit', (e) => {
 categorySelect.addEventListener('change', () => customCategoryInput.classList.toggle('hide', categorySelect.value !== 'custom'));
 
 // Subtask Logic in Main Modal
-addSubtaskBtn.addEventListener('click', () => { 
+subtaskForm.addEventListener('submit', (e) => {
+    e.preventDefault();
     const text = subtaskInput.value.trim();
     if (!text) return;
     renderSubtaskInModal({ text: text, completed: false }, subtaskList, false); 
@@ -554,7 +535,7 @@ taskBoardView.addEventListener('click', (e) => {
 statusFilters.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { statusFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentStatusFilter = e.target.dataset.filter; renderTasks(); } });
 categoryFilters.addEventListener('click', (e) => { if (e.target.matches('.category-btn')) { if(categoryFilters.querySelector('.active')) categoryFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentCategoryFilter = e.target.dataset.filter; renderTasks(); } });
 
-// --- UTILITY FUNCTIONS ---
+// Utility Functions
 function shadeColor(color, percent) {
     let R = parseInt(color.substring(1, 3), 16);
     let G = parseInt(color.substring(3, 5), 16);
@@ -570,3 +551,4 @@ function shadeColor(color, percent) {
     const BB = ((B.toString(16).length === 1) ? "0" + B.toString(16) : B.toString(16));
     return "#" + RR + GG + BB;
 }
+
