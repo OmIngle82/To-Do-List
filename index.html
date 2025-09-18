@@ -73,58 +73,44 @@
                         <input type="text" id="profile-name" placeholder="Enter your name">
                     </div>
 
-                    <!-- Statistics Section -->
                     <div class="settings-section">
                         <h3>Statistics</h3>
                         <div class="stats-container">
-                            <div class="stat-card">
-                                <h4>Total Tasks</h4>
-                                <p id="stat-total">0</p>
-                            </div>
-                            <div class="stat-card">
-                                <h4>Completed</h4>
-                                <p id="stat-completed">0</p>
-                            </div>
-                            <div class="stat-card">
-                                <h4>Pending</h4>
-                                <p id="stat-pending">0</p>
-                            </div>
+                            <div class="stat-card"><h4>Total</h4><p id="stat-total">0</p></div>
+                            <div class="stat-card"><h4>To-Do</h4><p id="stat-todo">0</p></div>
+                            <div class="stat-card"><h4>In Progress</h4><p id="stat-inprogress">0</p></div>
+                            <div class="stat-card"><h4>Completed</h4><p id="stat-completed">0</p></div>
                         </div>
                     </div>
 
-                    <!-- Appearance Section -->
                     <div class="settings-section">
                         <h3>Appearance</h3>
                         <div class="form-group">
                             <label>Theme</label>
                             <div class="theme-switcher">
                                 <span>Light</span>
-                                <label class="switch">
-                                    <input type="checkbox" id="theme-toggle">
-                                    <span class="slider round"></span>
-                                </label>
+                                <label class="switch"><input type="checkbox" id="theme-toggle"><span class="slider round"></span></label>
                                 <span>Dark</span>
                             </div>
                         </div>
                         <div class="form-group">
                             <label>Accent Color</label>
-                            <div id="accent-color-picker" class="color-picker">
-                                <!-- Colors added by JS -->
-                            </div>
+                            <div id="accent-color-picker" class="color-picker"></div>
                         </div>
                     </div>
 
-                     <!-- Layout Section -->
                     <div class="settings-section">
                         <h3>Task Layout</h3>
                         <div id="layout-switcher" class="layout-switcher">
-                            <label>
-                                <input type="radio" name="layout" value="list" checked> List
-                            </label>
-                            <label>
-                                <input type="radio" name="layout" value="board"> Board
-                            </label>
+                            <label><input type="radio" name="layout" value="list" checked> List</label>
+                            <label><input type="radio" name="layout" value="board"> Board</label>
+                            <label><input type="radio" name="layout" value="calendar"> Calendar</label>
                         </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Smart Features</h3>
+                        <button type="button" id="enable-notifications-btn" class="settings-btn">Enable Reminders</button>
                     </div>
 
                     <button type="submit" class="auth-btn">Save Profile</button>
@@ -135,25 +121,35 @@
             <section id="todo-page" class="page hide">
                 <div class="todo-header">
                     <div class="filters-container">
-                        <div class="filters">
-                            <button class="filter-btn active" data-filter="all">All</button>
-                            <button class="filter-btn" data-filter="pending">Pending</button>
-                            <button class="filter-btn" data-filter="completed">Completed</button>
+                        <div class="search-and-status">
+                             <div class="search-wrapper">
+                                <input type="text" id="search-input" placeholder="Search tasks...">
+                                <button id="search-btn" class="search-btn"><i class="fas fa-search"></i></button>
+                            </div>
+                            <div class="filters" id="status-filters">
+                                <button class="filter-btn active" data-filter="all">All</button>
+                                <button class="filter-btn" data-filter="pending">Pending</button>
+                                <button class="filter-btn" data-filter="completed">Completed</button>
+                            </div>
+                            <div class="filters" id="priority-filters">
+                                <button class="filter-btn active" data-priority="all">All Priorities</button>
+                                <button class="filter-btn" data-priority="high">High</button>
+                                <button class="filter-btn" data-priority="medium">Medium</button>
+                                <button class="filter-btn" data-priority="low">Low</button>
+                            </div>
                         </div>
-                        <div id="category-filters" class="category-filters">
-                            <!-- Category tags rendered here -->
-                        </div>
+                        <div id="category-filters" class="category-filters"></div>
                     </div>
-                    <button id="add-task-btn" class="add-task-btn"><i class="fas fa-plus"></i> Add New Task</button>
+                    <div class="add-task-controls">
+                        <button id="voice-add-btn" class="icon-btn" title="Add Task with Voice"><i class="fas fa-microphone"></i></button>
+                        <button id="add-task-btn" class="add-task-btn"><i class="fas fa-plus"></i> Add Task</button>
+                    </div>
                 </div>
-                <!-- List View Container -->
-                <ul id="task-list-view" class="task-view">
-                    <!-- Tasks rendered here -->
-                </ul>
-                <!-- Board View Container -->
-                <div id="task-board-view" class="task-view hide">
-                    <!-- Columns and tasks rendered here -->
-                </div>
+                
+                <ul id="task-list-view" class="task-view"></ul>
+                <div id="task-board-view" class="task-view hide"></div>
+                <div id="calendar-view" class="task-view hide"></div>
+
             </section>
         </main>
     </div>
@@ -162,60 +158,40 @@
     <div id="task-modal" class="modal-overlay hide">
         <div class="modal-content">
             <form id="task-form">
-                <input type="hidden" id="task-id">
                 <h2 id="modal-title">Add New Task</h2>
                 <input type="text" id="task-input" placeholder="Enter task title..." required>
+                <div id="ai-suggestion-box" class="ai-suggestion-box"></div>
                 
                 <div class="modal-grid">
-                    <!-- Priority -->
                     <div class="form-group">
                         <label>Priority</label>
-                        <select id="task-priority">
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                        </select>
+                        <div class="select-wrapper"><select id="task-priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
                     </div>
-                    <!-- Deadline -->
-                    <div class="form-group">
-                        <label>Deadline</label>
-                        <div class="datetime-picker">
-                            <input type="text" id="task-deadline-date" placeholder="Select date">
-                            <input type="text" id="task-deadline-time" placeholder="Select time">
-                        </div>
-                    </div>
-                    <!-- Category -->
-                    <div class="form-group">
-                        <label>Category</label>
-                        <div class="category-group">
-                            <select id="task-category">
-                                <option value="Personal">Personal</option>
-                                <option value="Work">Work</option>
-                                <option value="Shopping">Shopping</option>
-                                <option value="Study">Study</option>
-                                <option value="custom">Custom...</option>
-                            </select>
-                            <input type="text" id="custom-category-input" class="hide" placeholder="New category name">
-                        </div>
-                    </div>
-                    <!-- Recurring -->
                      <div class="form-group">
-                        <label>Recurring</label>
-                        <select id="task-recurring">
-                            <option value="none">None</option>
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                        </select>
+                        <label>Status</label>
+                        <div class="select-wrapper"><select id="task-status"><option value="todo">To-Do</option><option value="inprogress">In Progress</option><option value="completed">Completed</option></select></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Deadline Date</label>
+                        <input type="text" id="task-deadline-date" placeholder="Select date">
+                    </div>
+                    <div class="form-group">
+                        <label>Deadline Time</label>
+                        <input type="text" id="task-deadline-time" placeholder="Select time">
                     </div>
                 </div>
 
-                <!-- Sub-tasks -->
+                <div class="form-group">
+                    <label>Category</label>
+                    <div class="category-group">
+                        <div class="select-wrapper"><select id="task-category"><option value="Personal">Personal</option><option value="Work">Work</option><option value="Shopping">Shopping</option><option value="Study">Study</option><option value="custom">Custom...</option></select></div>
+                        <input type="text" id="custom-category-input" class="hide" placeholder="New category name">
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Sub-tasks</label>
-                    <div id="subtask-list">
-                        <!-- Sub-tasks will be added here -->
-                    </div>
+                    <div id="subtask-list"></div>
                     <form id="subtask-form" class="subtask-form">
                         <input type="text" id="subtask-input" placeholder="Add a sub-task...">
                         <button type="submit" class="subtask-add-btn"><i class="fas fa-plus"></i></button>
@@ -234,11 +210,9 @@
     <div id="task-detail-modal" class="modal-overlay hide">
         <div class="modal-content">
             <h2 id="detail-task-title">Task Details</h2>
-            <div id="detail-subtask-list">
-                <!-- Sub-tasks for detail view -->
-            </div>
+            <div id="detail-subtask-list"></div>
             <form id="detail-subtask-form" class="subtask-form">
-                <input type="text" id="detail-subtask-input" placeholder="Add a sub-task...">
+                <input type="text" id="detail-subtask-input" placeholder="Add a new sub-task...">
                 <button type="submit" class="subtask-add-btn"><i class="fas fa-plus"></i></button>
             </form>
             <div class="modal-actions">
