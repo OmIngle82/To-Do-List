@@ -77,8 +77,7 @@
                         <h3>Statistics</h3>
                         <div class="stats-container">
                             <div class="stat-card"><h4>Total</h4><p id="stat-total">0</p></div>
-                            <div class="stat-card"><h4>To-Do</h4><p id="stat-todo">0</p></div>
-                            <div class="stat-card"><h4>In Progress</h4><p id="stat-inprogress">0</p></div>
+                            <div class="stat-card"><h4>Pending</h4><p id="stat-pending">0</p></div>
                             <div class="stat-card"><h4>Completed</h4><p id="stat-completed">0</p></div>
                         </div>
                     </div>
@@ -121,11 +120,11 @@
             <section id="todo-page" class="page hide">
                 <div class="todo-header">
                     <div class="filters-container">
-                        <div class="search-and-status">
-                             <div class="search-wrapper">
-                                <input type="text" id="search-input" placeholder="Search tasks...">
-                                <button id="search-btn" class="search-btn"><i class="fas fa-search"></i></button>
-                            </div>
+                         <div class="search-wrapper">
+                            <input type="text" id="search-input" placeholder="Search tasks by name, category...">
+                            <button class="search-btn" id="search-btn" aria-label="Search"><i class="fas fa-search"></i></button>
+                        </div>
+                        <div class="main-filters">
                             <div class="filters" id="status-filters">
                                 <button class="filter-btn active" data-filter="all">All</button>
                                 <button class="filter-btn" data-filter="pending">Pending</button>
@@ -159,8 +158,11 @@
         <div class="modal-content">
             <form id="task-form">
                 <h2 id="modal-title">Add New Task</h2>
-                <input type="text" id="task-input" placeholder="Enter task title..." required>
-                <div id="ai-suggestion-box" class="ai-suggestion-box"></div>
+                <div class="form-group">
+                    <label for="task-input">Task Title</label>
+                    <input type="text" id="task-input" placeholder="e.g., Finish report by Friday 5pm" required>
+                    <div id="ai-suggestion-box" class="ai-suggestion-box"></div>
+                </div>
                 
                 <div class="modal-grid">
                     <div class="form-group">
@@ -227,10 +229,13 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-messaging-compat.js"></script>
     <!-- Flatpickr -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <!-- My Script -->
+    <!-- My Scripts -->
     <script src="script.js"></script>
+    <script src="ai-suggestions.js"></script>
+    
 </body>
 </html>
 
