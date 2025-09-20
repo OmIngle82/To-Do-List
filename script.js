@@ -39,7 +39,6 @@ const calendarView = document.getElementById('calendar-view'), addTaskBtn = docu
 const statusFilters = document.getElementById('status-filters'), categoryFilters = document.getElementById('category-filters');
 const priorityFilters = document.getElementById('priority-filters');
 const searchInput = document.getElementById('search-input');
-const searchBtn = document.getElementById('search-btn');
 const taskModal = document.getElementById('task-modal'), taskModalTitle = document.getElementById('modal-title');
 const taskForm = document.getElementById('task-form'), taskInput = document.getElementById('task-input');
 const prioritySelect = document.getElementById('task-priority'), taskStatusSelect = document.getElementById('task-status');
@@ -52,7 +51,6 @@ const detailSubtaskList = document.getElementById('detail-subtask-list'), detail
 const detailSubtaskInput = document.getElementById('detail-subtask-input'), detailCloseBtn = document.getElementById('detail-close-btn');
 const signinFeedback = document.getElementById('signin-feedback'), signupFeedback = document.getElementById('signup-feedback');
 const profileFeedback = document.getElementById('profile-feedback');
-// New Smart Feature Elements
 const voiceAddTaskBtn = document.getElementById('voice-add-btn');
 const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
 const aiSuggestionBox = document.getElementById('ai-suggestion-box');
@@ -60,19 +58,24 @@ const aiSuggestionBox = document.getElementById('ai-suggestion-box');
 
 // --- App State --- //
 let allTasks = [], currentUser = null;
-let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373' };
+let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' };
 let currentStatusFilter = 'all', currentCategoryFilter = 'all', currentPriorityFilter = 'all', currentSearchTerm = '';
+let selectedDateFilter = null; // For the new date filter
 let editingTaskId = null, detailTaskId = null;
 let calendarDate = new Date();
+let calendarMode = userPreferences.calendarDefault; // 'monthly' or 'weekly'
 let unsubscribeTasks, unsubscribeProfile;
 const accentColors = ['#d4a373', '#f07167', '#00afb9', '#9d4edd', '#fb8500'];
 
 // --- Initializations --- //
 const datePicker = flatpickr(deadlineDateInput, { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y" });
 const timePicker = flatpickr(deadlineTimeInput, { enableTime: true, noCalendar: true, dateFormat: "H:i", altInput: true, altFormat: "h:i K" });
+let dateFilterInstance = null; // Will be initialized later
+
+// Initialize Speech Recognition
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
-if(SpeechRecognition) {
+if (SpeechRecognition) {
     recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.lang = 'en-US';
@@ -115,11 +118,19 @@ const updateUIforLoginState = (user) => {
 };
 
 const applyUserPreferences = (prefs = {}) => {
-    userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', ...prefs };
+    userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly', ...prefs };
+    calendarMode = userPreferences.calendarDefault;
     document.body.classList.toggle('dark-theme', userPreferences.theme === 'dark');
     if(themeToggle) themeToggle.checked = userPreferences.theme === 'dark';
-    const layoutInput = document.querySelector(`input[name="layout"][value="${userPreferences.layout}"]`);
-    if(layoutInput) layoutInput.checked = true;
+    
+    document.querySelectorAll('input[name="layout"]').forEach(input => {
+        if(input.value === userPreferences.layout) input.checked = true;
+    });
+    
+    document.querySelectorAll('input[name="calendar-default"]').forEach(input => {
+        if(input.value === userPreferences.calendarDefault) input.checked = true;
+    });
+    
     if(taskListView) taskListView.classList.toggle('hide', userPreferences.layout !== 'list');
     if(taskBoardView) taskBoardView.classList.toggle('hide', userPreferences.layout !== 'board');
     if (calendarView) calendarView.classList.toggle('hide', userPreferences.layout !== 'calendar');
@@ -153,7 +164,6 @@ const listenForTasks = () => {
         .onSnapshot(snapshot => {
             allTasks = snapshot.docs.map(doc => {
                 const data = doc.data();
-                // Backwards compatibility for old 'completed' boolean field
                 if (typeof data.completed !== 'undefined' && !data.status) {
                     data.status = data.completed ? 'completed' : 'todo';
                 }
@@ -177,8 +187,22 @@ const renderCurrentView = () => {
 };
 
 const getFilteredTasks = () => {
-    const searchTerm = currentSearchTerm; // Already pre-processed to lowercase and trimmed
-    return allTasks.filter(task => {
+    const searchTerm = currentSearchTerm;
+    let tasksToFilter = allTasks;
+
+    // Apply new date filter first
+    if (selectedDateFilter) {
+        tasksToFilter = tasksToFilter.filter(task => {
+            if (!task.deadline || !task.deadline.seconds) return false;
+            const taskDate = new Date(task.deadline.seconds * 1000);
+            return taskDate.getFullYear() === selectedDateFilter.getFullYear() &&
+                   taskDate.getMonth() === selectedDateFilter.getMonth() &&
+                   taskDate.getDate() === selectedDateFilter.getDate();
+        });
+    }
+
+    // Apply other filters
+    return tasksToFilter.filter(task => {
         const searchMatch = searchTerm === '' ||
             (task.text && task.text.toLowerCase().includes(searchTerm)) ||
             (task.category && task.category.toLowerCase().includes(searchTerm));
@@ -238,11 +262,10 @@ const renderBoardView = () => {
         <div class="task-column"><h3>Completed</h3><div class="task-cards" data-status="completed"></div></div>
     `;
 
-    if (filteredTasks.length === 0 && (currentSearchTerm || currentCategoryFilter !== 'all' || currentPriorityFilter !== 'all' || currentStatusFilter !== 'all')) {
+    if (filteredTasks.length === 0 && (currentSearchTerm || currentCategoryFilter !== 'all' || currentPriorityFilter !== 'all' || currentStatusFilter !== 'all' || selectedDateFilter)) {
         taskBoardView.innerHTML = `<p class="no-tasks">No tasks found. Try adjusting your filters!</p>`;
         return;
     }
-
 
     const containers = {
         todo: taskBoardView.querySelector('.task-cards[data-status="todo"]'),
@@ -261,7 +284,6 @@ const renderBoardView = () => {
         if (container) container.appendChild(card);
     });
 
-    // Add drag and drop listeners
     taskBoardView.querySelectorAll('.task-card-board').forEach(card => {
         card.addEventListener('dragstart', e => {
             e.target.classList.add('dragging');
@@ -270,10 +292,7 @@ const renderBoardView = () => {
         card.addEventListener('dragend', e => e.target.classList.remove('dragging'));
     });
     taskBoardView.querySelectorAll('.task-cards').forEach(column => {
-        column.addEventListener('dragover', e => {
-            e.preventDefault();
-            e.currentTarget.classList.add('drag-over');
-        });
+        column.addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); });
         column.addEventListener('dragleave', e => e.currentTarget.classList.remove('drag-over'));
         column.addEventListener('drop', e => {
             e.preventDefault();
@@ -287,52 +306,102 @@ const renderBoardView = () => {
 
 const renderCalendarView = () => {
     if (!calendarView) return;
-    const month = calendarDate.getMonth();
+
     const year = calendarDate.getFullYear();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
+    const month = calendarDate.getMonth();
+    const day = calendarDate.getDate();
+
     calendarView.innerHTML = `
         <div class="calendar-header">
-            <button id="prev-month-btn"><i class="fas fa-chevron-left"></i></button>
-            <h2>${calendarDate.toLocaleString('default', { month: 'long' })} ${year}</h2>
-            <button id="next-month-btn"><i class="fas fa-chevron-right"></i></button>
+             <div class="calendar-mode-toggle">
+                <button data-mode="monthly" class="toggle-btn ${calendarMode === 'monthly' ? 'active' : ''}">Month</button>
+                <button data-mode="weekly" class="toggle-btn ${calendarMode === 'weekly' ? 'active' : ''}">Week</button>
+            </div>
+            <button id="prev-btn"><i class="fas fa-chevron-left"></i></button>
+            <h2 id="calendar-title"></h2>
+            <button id="next-btn"><i class="fas fa-chevron-right"></i></button>
         </div>
-        <div class="calendar-grid">
-            ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<div class="calendar-day-header">${d}</div>`).join('')}
-        </div>
+        <div id="calendar-grid-main" class="calendar-grid"></div>
     `;
+    
+    const grid = document.getElementById('calendar-grid-main');
+    const title = document.getElementById('calendar-title');
 
-    const grid = calendarView.querySelector('.calendar-grid');
-    for (let i = 0; i < firstDay; i++) {
-        const emptyCell = document.createElement('div');
-        emptyCell.className = 'day-cell other-month';
-        grid.appendChild(emptyCell);
-    }
-    for (let i = 1; i <= daysInMonth; i++) {
-        const dayCell = document.createElement('div');
-        dayCell.className = 'day-cell';
-        dayCell.innerHTML = `<div class="day-number">${i}</div><div class="calendar-tasks"></div>`;
-        grid.appendChild(dayCell);
+    if (calendarMode === 'weekly') {
+        const weekStart = new Date(calendarDate);
+        weekStart.setDate(day - calendarDate.getDay());
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        title.textContent = `${weekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`;
+
+        grid.classList.add('weekly-view');
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        days.forEach(d => grid.insertAdjacentHTML('beforeend', `<div class="calendar-day-header">${d}</div>`));
+        for (let i = 0; i < 7; i++) {
+            const currentDay = new Date(weekStart);
+            currentDay.setDate(weekStart.getDate() + i);
+            const dayCell = document.createElement('div');
+            dayCell.className = 'day-cell';
+            dayCell.innerHTML = `<div class="day-number">${currentDay.getDate()}</div><div class="calendar-tasks"></div>`;
+            grid.appendChild(dayCell);
+            
+            const tasksForDay = allTasks.filter(task => {
+                if (!task.deadline) return false;
+                const taskDate = new Date(task.deadline.seconds * 1000);
+                return taskDate.toDateString() === currentDay.toDateString();
+            });
+            const tasksContainer = dayCell.querySelector('.calendar-tasks');
+            tasksForDay.forEach(task => {
+                const event = document.createElement('div');
+                event.className = 'calendar-task-event';
+                event.textContent = task.text;
+                event.addEventListener('click', () => openDetailModal(task));
+                tasksContainer.appendChild(event);
+            });
+        }
+        document.getElementById('prev-btn').onclick = () => { calendarDate.setDate(day - 7); renderCalendarView(); };
+        document.getElementById('next-btn').onclick = () => { calendarDate.setDate(day + 7); renderCalendarView(); };
+    } else { // Monthly View
+        title.textContent = `${calendarDate.toLocaleString('default', { month: 'long' })} ${year}`;
+        grid.classList.remove('weekly-view');
+        const firstDayOfMonth = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
         
-        const tasksForDay = allTasks.filter(task => {
-            if (!task.deadline) return false;
-            const taskDate = new Date(task.deadline.seconds * 1000);
-            return taskDate.getFullYear() === year && taskDate.getMonth() === month && taskDate.getDate() === i;
-        });
-        const tasksContainer = dayCell.querySelector('.calendar-tasks');
-        tasksForDay.forEach(task => {
-            const event = document.createElement('div');
-            event.className = 'calendar-task-event';
-            event.textContent = task.text;
-            event.addEventListener('click', () => openDetailModal(task));
-            tasksContainer.appendChild(event);
-        });
+        ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => grid.insertAdjacentHTML('beforeend', `<div class="calendar-day-header">${d}</div>`));
+        for (let i = 0; i < firstDayOfMonth; i++) grid.insertAdjacentHTML('beforeend', '<div class="day-cell other-month"></div>');
+        
+        for (let i = 1; i <= daysInMonth; i++) {
+            const dayCell = document.createElement('div');
+            dayCell.className = 'day-cell';
+            dayCell.innerHTML = `<div class="day-number">${i}</div><div class="calendar-tasks"></div>`;
+            grid.appendChild(dayCell);
+            const tasksForDay = allTasks.filter(task => {
+                if (!task.deadline) return false;
+                const taskDate = new Date(task.deadline.seconds * 1000);
+                return taskDate.getFullYear() === year && taskDate.getMonth() === month && taskDate.getDate() === i;
+            });
+            const tasksContainer = dayCell.querySelector('.calendar-tasks');
+            tasksForDay.forEach(task => {
+                const event = document.createElement('div');
+                event.className = 'calendar-task-event';
+                event.textContent = task.text;
+                event.addEventListener('click', () => openDetailModal(task));
+                tasksContainer.appendChild(event);
+            });
+        }
+        document.getElementById('prev-btn').onclick = () => { calendarDate.setMonth(month - 1); renderCalendarView(); };
+        document.getElementById('next-btn').onclick = () => { calendarDate.setMonth(month + 1); renderCalendarView(); };
     }
-
-    calendarView.querySelector('#prev-month-btn')?.addEventListener('click', () => { calendarDate.setMonth(month - 1); renderCalendarView(); });
-    calendarView.querySelector('#next-month-btn')?.addEventListener('click', () => { calendarDate.setMonth(month + 1); renderCalendarView(); });
+    
+    // Attach listener to new toggle buttons
+    calendarView.querySelector('.calendar-mode-toggle').addEventListener('click', (e) => {
+        if (e.target.matches('.toggle-btn')) {
+            calendarMode = e.target.dataset.mode;
+            renderCalendarView();
+        }
+    });
 };
+
 
 const renderCategoryFilters = () => {
     if (!categoryFilters) return;
@@ -346,7 +415,7 @@ const renderCategoryFilters = () => {
 
 const updateTaskCounters = () => {
     const total = allTasks.length;
-    const completed = allTasks.filter(t => t.status === 'completed' || t.completed).length;
+    const completed = allTasks.filter(t => t.status === 'completed').length;
     const pending = total - completed;
     if (statTotal) statTotal.textContent = total;
     if (statCompleted) statCompleted.textContent = completed;
@@ -369,11 +438,12 @@ const openTaskModal = (task = null) => {
         if(taskStatusSelect) taskStatusSelect.value = task.status || 'todo';
         if (task.deadline) {
             const deadline = new Date(task.deadline.seconds * 1000);
-            datePicker.setDate(deadline); timePicker.setDate(deadline);
+            datePicker.setDate(deadline, false); 
+            timePicker.setDate(deadline, false);
         } else {
             datePicker.clear(); timePicker.clear();
         }
-        const defaultCategories = ['Personal', 'Work', 'Shopping', 'Study'];
+        const defaultCategories = [...categorySelect.options].map(o => o.value);
         if (task.category && !defaultCategories.includes(task.category)) {
             categorySelect.value = 'custom';
             customCategoryInput.classList.remove('hide'); customCategoryInput.value = task.category;
@@ -410,29 +480,7 @@ const renderSubtaskInModal = (subtask, listElement, isDetailView = false) => {
     listElement.appendChild(item);
 };
 
-
 // --- Smart Feature Functions --- //
-const handleVoiceInput = () => {
-    if (recognition) {
-        voiceAddTaskBtn?.classList.add('active');
-        recognition.start();
-        recognition.onend = () => voiceAddTaskBtn?.classList.remove('active');
-        recognition.onresult = (event) => {
-            const speechToText = event.results[0][0].transcript;
-            openTaskModal();
-            taskInput.value = speechToText;
-            // Dispatch event to trigger AI suggestions from the other script
-            taskInput.dispatchEvent(new Event('keyup')); 
-        };
-        recognition.onerror = (event) => {
-             console.error("Speech Recognition Error:", event.error);
-             voiceAddTaskBtn?.classList.remove('active');
-        }
-    } else {
-        alert("Sorry, your browser doesn't support Speech Recognition.");
-    }
-};
-
 const setupNotifications = () => {
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !messaging) {
         showFeedback(profileFeedback, 'Notifications not supported.', 'error');
@@ -442,12 +490,10 @@ const setupNotifications = () => {
     Notification.requestPermission().then((permission) => {
         if (permission === 'granted') {
             showFeedback(profileFeedback, 'Notifications enabled!', 'success');
-            // IMPORTANT: Replace with your actual VAPID key from Firebase Project Settings > Cloud Messaging
             const vapidKey = 'YOUR_VAPID_KEY_FROM_FIREBASE_CONSOLE'; 
             messaging.getToken({ vapidKey: vapidKey })
                 .then((currentToken) => {
                     if (currentToken) {
-                        // Save the token to the user's profile in Firestore
                         db.collection('users').doc(currentUser.uid).set({ fcmToken: currentToken }, { merge: true });
                     } else {
                         showFeedback(profileFeedback, 'Could not get notification token.', 'error');
@@ -460,6 +506,32 @@ const setupNotifications = () => {
             showFeedback(profileFeedback, 'Notifications not granted.', 'error');
         }
     });
+};
+
+const handleVoiceInput = () => {
+    if (recognition) {
+        voiceAddTaskBtn?.classList.add('active');
+        recognition.start();
+
+        recognition.onend = () => {
+            voiceAddTaskBtn?.classList.remove('active');
+        };
+
+        recognition.onresult = (event) => {
+            const speechToText = event.results[0][0].transcript;
+            openTaskModal();
+            taskInput.value = speechToText;
+            taskInput.dispatchEvent(new Event('keyup')); // Trigger AI suggestions
+        };
+        
+        recognition.onerror = (event) => {
+             console.error("Speech Recognition Error:", event.error);
+             voiceAddTaskBtn?.classList.remove('active');
+        };
+    } else {
+        alert("Sorry, your browser doesn't support Speech Recognition.");
+        if (voiceAddTaskBtn) voiceAddTaskBtn.style.display = 'none';
+    }
 };
 
 // --- Event Listeners --- //
@@ -481,7 +553,7 @@ signupForm?.addEventListener('submit', (e) => {
     auth.createUserWithEmailAndPassword(signupEmailInput.value, signupPasswordInput.value)
         .then(cred => db.collection('users').doc(cred.user.uid).set({
             displayName: signupEmailInput.value.split('@')[0],
-            preferences: { theme: 'light', layout: 'list', accentColor: '#d4a373' }
+            preferences: { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' }
         }))
         .catch(error => showFeedback(signupFeedback, error.message, 'error'));
 });
@@ -510,7 +582,18 @@ profilePhotoInput?.addEventListener('change', (e) => {
 });
 themeToggle?.addEventListener('change', (e) => { userPreferences.theme = e.target.checked ? 'dark' : 'light'; applyUserPreferences(userPreferences); });
 accentColorPicker?.addEventListener('click', (e) => { if (e.target.matches('.color-swatch')) { userPreferences.accentColor = e.target.dataset.color; applyUserPreferences(userPreferences); } });
-layoutSwitcher?.addEventListener('change', (e) => { if (e.target.matches('input[name="layout"]')) { userPreferences.layout = e.target.value; applyUserPreferences(userPreferences); renderCurrentView(); } });
+layoutSwitcher?.addEventListener('change', (e) => { 
+    if (e.target.matches('input[name="layout"]')) {
+        userPreferences.layout = e.target.value; 
+        applyUserPreferences(userPreferences); 
+        renderCurrentView(); 
+    }
+    if (e.target.matches('input[name="calendar-default"]')) {
+        userPreferences.calendarDefault = e.target.value;
+        calendarMode = e.target.value;
+        // No need to re-render here, it will be picked up when profile is saved or layout is switched to calendar
+    }
+});
 
 // Task & Modal Actions
 addTaskBtn?.addEventListener('click', () => openTaskModal());
@@ -526,12 +609,12 @@ taskForm?.addEventListener('submit', (e) => {
     if (deadlineDateVal) {
         deadline = new Date(deadlineDateVal);
         if (deadlineTimeVal) {
-            deadline.setHours(deadlineTimeVal.getHours());
-            deadline.setMinutes(deadlineTimeVal.getMinutes());
-            deadline.setSeconds(0, 0);
+            deadline.setHours(deadlineTimeVal.getHours(), deadlineTimeVal.getMinutes(), 0, 0);
         }
     }
-    const subtasks = Array.from(subtaskList.querySelectorAll('.subtask-item')).map(item => ({ text: item.querySelector('input[type="text"]').value.trim(), completed: false }));
+    const subtasks = Array.from(subtaskList.querySelectorAll('.subtask-item input[type="text"]'))
+        .map(input => ({ text: input.value.trim(), completed: false }))
+        .filter(sub => sub.text);
     const status = taskStatusSelect ? taskStatusSelect.value : 'todo';
     const taskData = { text: taskInput.value.trim(), priority: prioritySelect.value, status: status, deadline: deadline ? firebase.firestore.Timestamp.fromDate(deadline) : null, category, subtasks };
     const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks');
@@ -544,7 +627,6 @@ taskForm?.addEventListener('submit', (e) => {
     taskModal.classList.add('hide');
 });
 categorySelect?.addEventListener('change', () => customCategoryInput.classList.toggle('hide', categorySelect.value !== 'custom'));
-
 
 // Subtasks
 subtaskForm?.addEventListener('submit', (e) => { e.preventDefault(); if (subtaskInput.value.trim()) { renderSubtaskInModal({ text: subtaskInput.value.trim(), completed: false }, subtaskList, false); subtaskInput.value = ''; } });
@@ -588,27 +670,19 @@ taskBoardView?.addEventListener('click', (e) => {
 });
 
 // Filters & Search
-const performSearch = () => {
-    if (!searchInput) return;
+searchInput?.addEventListener('input', () => {
     currentSearchTerm = searchInput.value.toLowerCase().trim();
     renderCurrentView();
-};
-
-searchBtn?.addEventListener('click', performSearch);
-searchInput?.addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') {
-        performSearch();
-    }
 });
-searchInput?.addEventListener('input', performSearch);
 
 statusFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { statusFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentStatusFilter = e.target.dataset.filter; renderCurrentView(); } });
 categoryFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { if(categoryFilters.querySelector('.active')) categoryFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentCategoryFilter = e.target.dataset.filter; renderCurrentView(); } });
 priorityFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { priorityFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentPriorityFilter = e.target.dataset.priority; renderCurrentView(); } });
 
 // New Feature Listeners
-if(voiceAddTaskBtn) voiceAddTaskBtn.addEventListener('click', handleVoiceInput);
 if(enableNotificationsBtn) enableNotificationsBtn.addEventListener('click', setupNotifications);
+if(voiceAddTaskBtn) voiceAddTaskBtn.addEventListener('click', handleVoiceInput);
+
 
 // --- Utility Functions --- //
 function shadeColor(color, percent) {
@@ -621,14 +695,62 @@ function shadeColor(color, percent) {
     return "#" + RR + GG + BB;
 }
 
-// Initialize Accent Color Picker
-if (accentColorPicker) {
-    accentColors.forEach(color => {
-        const swatch = document.createElement('div');
-        swatch.className = 'color-swatch';
-        swatch.style.backgroundColor = color;
-        swatch.dataset.color = color;
-        accentColorPicker.appendChild(swatch);
-    });
-}
+// --- Initial Setup on DOMContentLoaded --- //
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize Accent Color Picker
+    if (accentColorPicker) {
+        accentColors.forEach(color => {
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = color;
+            swatch.dataset.color = color;
+            accentColorPicker.appendChild(swatch);
+        });
+    }
+
+    // Initialize Date Filter
+    const mainFiltersContainer = document.querySelector('.main-filters');
+    if (mainFiltersContainer) {
+        const dateFilterWrapper = document.createElement('div');
+        dateFilterWrapper.className = 'date-filter-wrapper';
+        dateFilterWrapper.innerHTML = `
+            <input type="text" id="date-filter-input" placeholder="Filter by date...">
+            <button id="clear-date-filter" class="clear-btn hide">&times;</button>
+        `;
+        mainFiltersContainer.appendChild(dateFilterWrapper);
+        const dateFilterInput = document.getElementById('date-filter-input');
+        const clearDateFilterBtn = document.getElementById('clear-date-filter');
+        dateFilterInstance = flatpickr(dateFilterInput, {
+            dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y",
+            onChange: function(selectedDates) {
+                selectedDateFilter = selectedDates.length > 0 ? selectedDates[0] : null;
+                clearDateFilterBtn.classList.toggle('hide', selectedDates.length === 0);
+                renderCurrentView();
+            }
+        });
+        clearDateFilterBtn.addEventListener('click', () => dateFilterInstance.clear());
+    }
+
+    // Add Calendar Default View setting to Profile page
+    const calendarLayoutLabel = document.querySelector('label input[value="calendar"]');
+    if (calendarLayoutLabel) {
+        const calendarSettings = document.createElement('div');
+        calendarSettings.id = 'calendar-settings';
+        calendarSettings.className = 'calendar-settings hide';
+        calendarSettings.innerHTML = `
+            <label>Default Calendar View</label>
+            <div class="layout-switcher">
+                <label><input type="radio" name="calendar-default" value="monthly" checked> Month</label>
+                <label><input type="radio" name="calendar-default" value="weekly"> Week</label>
+            </div>
+        `;
+        calendarLayoutLabel.parentElement.appendChild(calendarSettings);
+        
+        document.querySelectorAll('input[name="layout"]').forEach(input => {
+            input.addEventListener('change', (e) => {
+                 document.getElementById('calendar-settings').classList.toggle('hide', e.target.value !== 'calendar');
+            });
+        });
+    }
+});
 
