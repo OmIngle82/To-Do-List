@@ -105,6 +105,7 @@
                             <label><input type="radio" name="layout" value="board"> Board</label>
                             <label><input type="radio" name="layout" value="calendar"> Calendar</label>
                         </div>
+                         <div id="calendar-settings" class="calendar-settings hide"></div>
                     </div>
 
                     <div class="settings-section">
@@ -119,11 +120,28 @@
             <!-- To-Do List Page -->
             <section id="todo-page" class="page hide">
                 <div class="todo-header">
-                    <div class="filters-container">
-                         <div class="search-wrapper">
+                    <div class="top-bar">
+                        <div class="search-wrapper">
+                             <i class="fas fa-search"></i>
                             <input type="text" id="search-input" placeholder="Search tasks by name, category...">
-                            <button class="search-btn" id="search-btn" aria-label="Search"><i class="fas fa-search"></i></button>
                         </div>
+                        <div class="add-task-controls">
+                            <button id="voice-add-btn" class="icon-btn" title="Add Task with Voice"><i class="fas fa-microphone"></i></button>
+                            <button id="add-task-btn" class="add-task-btn"><i class="fas fa-plus"></i> Add Task</button>
+                        </div>
+                    </div>
+
+                    <div class="mode-toggle-container">
+                        <label class="mode-toggle">
+                            <input type="checkbox" id="mode-toggle-checkbox">
+                            <div class="slider">
+                                <span class="label simple">Simple</span>
+                                <span class="label team">Team</span>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div class="filters-container">
                         <div class="main-filters">
                             <div class="filters" id="status-filters">
                                 <button class="filter-btn active" data-filter="all">All</button>
@@ -136,12 +154,19 @@
                                 <button class="filter-btn" data-priority="medium">Medium</button>
                                 <button class="filter-btn" data-priority="low">Low</button>
                             </div>
+                             <div class="date-filter-wrapper">
+                                <input type="text" id="date-filter-input" placeholder="Filter by date...">
+                                <button id="clear-date-filter" class="clear-btn hide">&times;</button>
+                            </div>
                         </div>
-                        <div id="category-filters" class="category-filters"></div>
-                    </div>
-                    <div class="add-task-controls">
-                        <button id="voice-add-btn" class="icon-btn" title="Add Task with Voice"><i class="fas fa-microphone"></i></button>
-                        <button id="add-task-btn" class="add-task-btn"><i class="fas fa-plus"></i> Add Task</button>
+                         <div class="list-controls">
+                            <div id="category-filters" class="category-filters"></div>
+                            <div class="team-controls-container hide">
+                                <button id="share-tasks-btn" title="Share Tasks">
+                                    <i class="fas fa-share-alt"></i> Share
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -153,7 +178,7 @@
         </main>
     </div>
 
-    <!-- Add/Edit Task Modal -->
+    <!-- Modals -->
     <div id="task-modal" class="modal-overlay hide">
         <div class="modal-content">
             <form id="task-form">
@@ -194,32 +219,59 @@
                 <div class="form-group">
                     <label>Sub-tasks</label>
                     <div id="subtask-list"></div>
-                    <form id="subtask-form" class="subtask-form">
+                    <div class="subtask-form">
                         <input type="text" id="subtask-input" placeholder="Add a sub-task...">
-                        <button type="submit" class="subtask-add-btn"><i class="fas fa-plus"></i></button>
-                    </form>
+                        <button type="button" id="subtask-add-btn" class="subtask-add-btn"><i class="fas fa-plus"></i></button>
+                    </div>
                 </div>
                 
                 <div class="modal-actions">
                     <button type="button" id="modal-cancel-btn" class="modal-btn cancel-btn">Cancel</button>
-                    <button type="submit" id="modal-save-btn" class="modal-btn save-btn">Save Task</button>
+                    <button type="button" id="modal-save-btn" class="modal-btn save-btn">Save Task</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Task Detail Modal -->
     <div id="task-detail-modal" class="modal-overlay hide">
         <div class="modal-content">
             <h2 id="detail-task-title">Task Details</h2>
             <div id="detail-subtask-list"></div>
-            <form id="detail-subtask-form" class="subtask-form">
+            <div class="subtask-form">
                 <input type="text" id="detail-subtask-input" placeholder="Add a new sub-task...">
-                <button type="submit" class="subtask-add-btn"><i class="fas fa-plus"></i></button>
-            </form>
+                <button type="button" id="detail-subtask-add-btn" class="subtask-add-btn"><i class="fas fa-plus"></i></button>
+            </div>
             <div class="modal-actions">
                 <button type="button" id="detail-close-btn" class="modal-btn cancel-btn">Close</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Team Mode Modals -->
+    <div id="team-welcome-modal" class="modal-overlay hide">
+        <div class="modal-content">
+            <h2 id="welcome-user-name">Welcome to Team Mode!</h2>
+            <p>Here, you can collaborate on tasks with your team. Share your personal tasks or work on tasks shared with you by others.</p>
+            <div class="modal-actions">
+                <button type="button" id="start-team-mode-btn" class="modal-btn save-btn">Let's Start</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="share-task-modal" class="modal-overlay hide">
+         <div class="modal-content">
+            <h2 id="share-modal-title">Share Selected Tasks</h2>
+            <p>Enter the email address of the user you want to share these tasks with.</p>
+            <form id="share-task-form">
+                <div class="form-group">
+                    <label for="share-email-input">Recipient's Email</label>
+                    <input type="email" id="share-email-input" placeholder="teammate@example.com" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-share-btn" class="modal-btn cancel-btn">Cancel</button>
+                    <button type="submit" class="modal-btn save-btn">Send</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -235,6 +287,7 @@
     <!-- My Scripts -->
     <script src="script.js"></script>
     <script src="ai-suggestions.js"></script>
+    <script src="teammode.js"></script>
     
 </body>
 </html>

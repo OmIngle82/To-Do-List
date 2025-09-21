@@ -3,17 +3,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2025, 10, 15);
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      // A user can create their own profile when they sign up.
+      allow create: if request.auth.uid != null;
+      
+      // A user can read or update their OWN profile, but not others'.
+      allow read, update: if request.auth.uid == userId;
+
+      // Logged-in users are allowed to list/query the users collection
+      // to find other users by email for sharing.
+      allow list: if request.auth.uid != null;
+
+      // Rules for the 'tasks' subcollection
+      match /tasks/{taskId} {
+        // The owner of the task list has full read and write access.
+        allow read, write: if request.auth.uid == userId;
+
+        // Allow another authenticated user to CREATE (share) a task in this list,
+        // provided they properly attribute it to themselves with their UID.
+        // This is the core rule that enables secure task sharing.
+        allow create: if request.auth.uid != null &&
+                      request.auth.uid != userId &&
+                      request.resource.data.sharedBy.uid == request.auth.uid;
+      }
     }
   }
 }

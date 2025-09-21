@@ -44,33 +44,33 @@ const taskForm = document.getElementById('task-form'), taskInput = document.getE
 const prioritySelect = document.getElementById('task-priority'), taskStatusSelect = document.getElementById('task-status');
 const deadlineDateInput = document.getElementById('task-deadline-date'), deadlineTimeInput = document.getElementById('task-deadline-time');
 const categorySelect = document.getElementById('task-category'), customCategoryInput = document.getElementById('custom-category-input');
-const subtaskForm = document.getElementById('subtask-form'), subtaskInput = document.getElementById('subtask-input');
+const subtaskInput = document.getElementById('subtask-input'), subtaskAddBtn = document.getElementById('subtask-add-btn');
 const subtaskList = document.getElementById('subtask-list'), cancelTaskBtn = document.getElementById('modal-cancel-btn');
+const saveTaskBtn = document.getElementById('modal-save-btn');
 const taskDetailModal = document.getElementById('task-detail-modal'), detailTaskTitle = document.getElementById('detail-task-title');
-const detailSubtaskList = document.getElementById('detail-subtask-list'), detailSubtaskForm = document.getElementById('detail-subtask-form');
-const detailSubtaskInput = document.getElementById('detail-subtask-input'), detailCloseBtn = document.getElementById('detail-close-btn');
+const detailSubtaskList = document.getElementById('detail-subtask-list');
+const detailSubtaskInput = document.getElementById('detail-subtask-input'), detailSubtaskAddBtn = document.getElementById('detail-subtask-add-btn'), detailCloseBtn = document.getElementById('detail-close-btn');
 const signinFeedback = document.getElementById('signin-feedback'), signupFeedback = document.getElementById('signup-feedback');
 const profileFeedback = document.getElementById('profile-feedback');
 const voiceAddTaskBtn = document.getElementById('voice-add-btn');
 const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
 const aiSuggestionBox = document.getElementById('ai-suggestion-box');
+const modeToggle = document.getElementById('mode-toggle-checkbox');
 
 
 // --- App State --- //
 let allTasks = [], currentUser = null;
 let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' };
 let currentStatusFilter = 'all', currentCategoryFilter = 'all', currentPriorityFilter = 'all', currentSearchTerm = '';
-let selectedDateFilter = null; // For the new date filter
+let selectedDateFilter = null;
 let editingTaskId = null, detailTaskId = null;
 let calendarDate = new Date();
-let calendarMode = userPreferences.calendarDefault; // 'monthly' or 'weekly'
+let calendarMode = userPreferences.calendarDefault;
 let unsubscribeTasks, unsubscribeProfile;
 const accentColors = ['#d4a373', '#f07167', '#00afb9', '#9d4edd', '#fb8500'];
 
 // --- Initializations --- //
-const datePicker = flatpickr(deadlineDateInput, { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y" });
-const timePicker = flatpickr(deadlineTimeInput, { enableTime: true, noCalendar: true, dateFormat: "H:i", altInput: true, altFormat: "h:i K" });
-let dateFilterInstance = null; // Will be initialized later
+let datePicker, timePicker, dateFilterInstance;
 
 // Initialize Speech Recognition
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -190,7 +190,6 @@ const getFilteredTasks = () => {
     const searchTerm = currentSearchTerm;
     let tasksToFilter = allTasks;
 
-    // Apply new date filter first
     if (selectedDateFilter) {
         tasksToFilter = tasksToFilter.filter(task => {
             if (!task.deadline || !task.deadline.seconds) return false;
@@ -201,7 +200,6 @@ const getFilteredTasks = () => {
         });
     }
 
-    // Apply other filters
     return tasksToFilter.filter(task => {
         const searchMatch = searchTerm === '' ||
             (task.text && task.text.toLowerCase().includes(searchTerm)) ||
@@ -233,7 +231,12 @@ const renderListView = () => {
         taskItem.dataset.priority = task.priority || 'low';
         const deadlineDate = task.deadline ? new Date(task.deadline.seconds * 1000).toLocaleDateString() : '';
         const deadlineTime = task.deadline ? new Date(task.deadline.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        
+        const sharedByTag = task.sharedBy ?
+            `<div class="shared-by-tag"><i class="fas fa-user-friends"></i> Shared by ${task.sharedBy.name}</div>` : '';
+
         taskItem.innerHTML = `
+            <div class="share-checkbox-wrapper"></div>
             <input type="checkbox" class="task-checkbox" ${task.status === 'completed' ? 'checked' : ''}>
             <div class="task-content">
                 <h3>${task.text}</h3>
@@ -242,6 +245,7 @@ const renderListView = () => {
                     ${deadlineDate ? `<span><i class="fas fa-calendar-alt"></i> ${deadlineDate}</span>` : ''}
                     ${deadlineTime ? `<span><i class="fas fa-clock"></i> ${deadlineTime}</span>` : ''}
                 </div>
+                ${sharedByTag}
             </div>
             <div class="task-actions">
                 <button class="edit-btn"><i class="fas fa-pencil-alt"></i></button>
@@ -250,6 +254,10 @@ const renderListView = () => {
         `;
         taskListView.appendChild(taskItem);
     });
+
+    if (typeof isSharingActive !== 'undefined' && isSharingActive) {
+        toggleShareCheckboxesVisibility(true);
+    }
 };
 
 const renderBoardView = () => {
@@ -262,7 +270,7 @@ const renderBoardView = () => {
         <div class="task-column"><h3>Completed</h3><div class="task-cards" data-status="completed"></div></div>
     `;
 
-    if (filteredTasks.length === 0 && (currentSearchTerm || currentCategoryFilter !== 'all' || currentPriorityFilter !== 'all' || currentStatusFilter !== 'all' || selectedDateFilter)) {
+    if (filteredTasks.length === 0) {
         taskBoardView.innerHTML = `<p class="no-tasks">No tasks found. Try adjusting your filters!</p>`;
         return;
     }
@@ -306,10 +314,7 @@ const renderBoardView = () => {
 
 const renderCalendarView = () => {
     if (!calendarView) return;
-
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
-    const day = calendarDate.getDate();
+    const year = calendarDate.getFullYear(), month = calendarDate.getMonth(), day = calendarDate.getDate();
 
     calendarView.innerHTML = `
         <div class="calendar-header">
@@ -324,8 +329,7 @@ const renderCalendarView = () => {
         <div id="calendar-grid-main" class="calendar-grid"></div>
     `;
     
-    const grid = document.getElementById('calendar-grid-main');
-    const title = document.getElementById('calendar-title');
+    const grid = document.getElementById('calendar-grid-main'), title = document.getElementById('calendar-title');
 
     if (calendarMode === 'weekly') {
         const weekStart = new Date(calendarDate);
@@ -333,10 +337,8 @@ const renderCalendarView = () => {
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
         title.textContent = `${weekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`;
-
         grid.classList.add('weekly-view');
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        days.forEach(d => grid.insertAdjacentHTML('beforeend', `<div class="calendar-day-header">${d}</div>`));
+        ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => grid.insertAdjacentHTML('beforeend', `<div class="calendar-day-header">${d}</div>`));
         for (let i = 0; i < 7; i++) {
             const currentDay = new Date(weekStart);
             currentDay.setDate(weekStart.getDate() + i);
@@ -347,8 +349,7 @@ const renderCalendarView = () => {
             
             const tasksForDay = allTasks.filter(task => {
                 if (!task.deadline) return false;
-                const taskDate = new Date(task.deadline.seconds * 1000);
-                return taskDate.toDateString() === currentDay.toDateString();
+                return new Date(task.deadline.seconds * 1000).toDateString() === currentDay.toDateString();
             });
             const tasksContainer = dayCell.querySelector('.calendar-tasks');
             tasksForDay.forEach(task => {
@@ -393,7 +394,6 @@ const renderCalendarView = () => {
         document.getElementById('next-btn').onclick = () => { calendarDate.setMonth(month + 1); renderCalendarView(); };
     }
     
-    // Attach listener to new toggle buttons
     calendarView.querySelector('.calendar-mode-toggle').addEventListener('click', (e) => {
         if (e.target.matches('.toggle-btn')) {
             calendarMode = e.target.dataset.mode;
@@ -401,7 +401,6 @@ const renderCalendarView = () => {
         }
     });
 };
-
 
 const renderCategoryFilters = () => {
     if (!categoryFilters) return;
@@ -421,7 +420,6 @@ const updateTaskCounters = () => {
     if (statCompleted) statCompleted.textContent = completed;
     if (statPending) statPending.textContent = pending;
 };
-
 
 // --- Modal Functions --- //
 const openTaskModal = (task = null) => {
@@ -512,18 +510,13 @@ const handleVoiceInput = () => {
     if (recognition) {
         voiceAddTaskBtn?.classList.add('active');
         recognition.start();
-
-        recognition.onend = () => {
-            voiceAddTaskBtn?.classList.remove('active');
-        };
-
+        recognition.onend = () => voiceAddTaskBtn?.classList.remove('active');
         recognition.onresult = (event) => {
             const speechToText = event.results[0][0].transcript;
             openTaskModal();
             taskInput.value = speechToText;
-            taskInput.dispatchEvent(new Event('keyup')); // Trigger AI suggestions
+            taskInput.dispatchEvent(new Event('keyup'));
         };
-        
         recognition.onerror = (event) => {
              console.error("Speech Recognition Error:", event.error);
              voiceAddTaskBtn?.classList.remove('active');
@@ -533,156 +526,6 @@ const handleVoiceInput = () => {
         if (voiceAddTaskBtn) voiceAddTaskBtn.style.display = 'none';
     }
 };
-
-// --- Event Listeners --- //
-// Auth & Nav
-auth.onAuthStateChanged(user => updateUIforLoginState(user));
-backBtn?.addEventListener('click', () => showPage('todo-page'));
-logo?.addEventListener('click', () => { if (currentUser) showPage('todo-page'); });
-signinLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
-signupLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
-profileLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('profile-page'); profileDropdown.classList.remove('show'); });
-showSignup?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
-showSignin?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
-logoutBtn?.addEventListener('click', () => auth.signOut());
-profileMenu?.addEventListener('click', (e) => { e.stopPropagation(); profileDropdown.classList.toggle('show'); });
-window.addEventListener('click', () => { if (profileDropdown?.classList.contains('show')) profileDropdown.classList.remove('show'); });
-
-signupForm?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    auth.createUserWithEmailAndPassword(signupEmailInput.value, signupPasswordInput.value)
-        .then(cred => db.collection('users').doc(cred.user.uid).set({
-            displayName: signupEmailInput.value.split('@')[0],
-            preferences: { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' }
-        }))
-        .catch(error => showFeedback(signupFeedback, error.message, 'error'));
-});
-signinForm?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    auth.signInWithEmailAndPassword(signinEmailInput.value, signinPasswordInput.value)
-        .catch(error => showFeedback(signinFeedback, error.message, 'error'));
-});
-
-// Profile & Preferences
-profileForm?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!currentUser) return;
-    db.collection('users').doc(currentUser.uid).set({
-        displayName: displayNameInput.value,
-        preferences: userPreferences
-    }, { merge: true }).then(() => showFeedback(profileFeedback, "Profile saved!", "success"))
-    .catch(error => showFeedback(profileFeedback, error.message, "error"));
-});
-profilePhotoInput?.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file || !currentUser) return;
-    storage.ref(`profile_photos/${currentUser.uid}/${file.name}`).put(file)
-        .then(snapshot => snapshot.ref.getDownloadURL()
-        .then(url => db.collection('users').doc(currentUser.uid).set({ photoURL: url }, { merge: true })));
-});
-themeToggle?.addEventListener('change', (e) => { userPreferences.theme = e.target.checked ? 'dark' : 'light'; applyUserPreferences(userPreferences); });
-accentColorPicker?.addEventListener('click', (e) => { if (e.target.matches('.color-swatch')) { userPreferences.accentColor = e.target.dataset.color; applyUserPreferences(userPreferences); } });
-layoutSwitcher?.addEventListener('change', (e) => { 
-    if (e.target.matches('input[name="layout"]')) {
-        userPreferences.layout = e.target.value; 
-        applyUserPreferences(userPreferences); 
-        renderCurrentView(); 
-    }
-    if (e.target.matches('input[name="calendar-default"]')) {
-        userPreferences.calendarDefault = e.target.value;
-        calendarMode = e.target.value;
-        // No need to re-render here, it will be picked up when profile is saved or layout is switched to calendar
-    }
-});
-
-// Task & Modal Actions
-addTaskBtn?.addEventListener('click', () => openTaskModal());
-cancelTaskBtn?.addEventListener('click', () => taskModal.classList.add('hide'));
-detailCloseBtn?.addEventListener('click', () => taskDetailModal.classList.add('hide'));
-taskForm?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!currentUser || !taskInput.value.trim()) return;
-    let category = categorySelect.value === 'custom' ? customCategoryInput.value.trim() || 'Uncategorized' : categorySelect.value;
-    const deadlineDateVal = datePicker.selectedDates[0];
-    const deadlineTimeVal = timePicker.selectedDates[0];
-    let deadline = null;
-    if (deadlineDateVal) {
-        deadline = new Date(deadlineDateVal);
-        if (deadlineTimeVal) {
-            deadline.setHours(deadlineTimeVal.getHours(), deadlineTimeVal.getMinutes(), 0, 0);
-        }
-    }
-    const subtasks = Array.from(subtaskList.querySelectorAll('.subtask-item input[type="text"]'))
-        .map(input => ({ text: input.value.trim(), completed: false }))
-        .filter(sub => sub.text);
-    const status = taskStatusSelect ? taskStatusSelect.value : 'todo';
-    const taskData = { text: taskInput.value.trim(), priority: prioritySelect.value, status: status, deadline: deadline ? firebase.firestore.Timestamp.fromDate(deadline) : null, category, subtasks };
-    const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks');
-    if (editingTaskId) {
-        taskRef.doc(editingTaskId).update(taskData);
-    } else {
-        taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        taskRef.add(taskData);
-    }
-    taskModal.classList.add('hide');
-});
-categorySelect?.addEventListener('change', () => customCategoryInput.classList.toggle('hide', categorySelect.value !== 'custom'));
-
-// Subtasks
-subtaskForm?.addEventListener('submit', (e) => { e.preventDefault(); if (subtaskInput.value.trim()) { renderSubtaskInModal({ text: subtaskInput.value.trim(), completed: false }, subtaskList, false); subtaskInput.value = ''; } });
-subtaskList?.addEventListener('click', (e) => { if (e.target.closest('.delete-subtask-btn')) e.target.closest('.subtask-item').remove(); });
-detailSubtaskForm?.addEventListener('submit', (e) => { e.preventDefault(); if (detailSubtaskInput.value.trim()) { renderSubtaskInModal({ text: detailSubtaskInput.value.trim(), completed: false }, detailSubtaskList, true); detailSubtaskInput.value = ''; saveSubtasksFromDetail(); } });
-detailSubtaskList?.addEventListener('click', (e) => {
-    if (e.target.closest('.delete-subtask-btn')) {
-        e.target.closest('.subtask-item').remove();
-    }
-    if (e.target.matches('input[type="checkbox"]')) {
-        e.target.closest('.subtask-item').classList.toggle('completed');
-    }
-    saveSubtasksFromDetail();
-});
-const saveSubtasksFromDetail = () => {
-    if (!currentUser || !detailTaskId) return;
-    const subtasks = Array.from(detailSubtaskList.querySelectorAll('.subtask-item')).map(item => ({ text: item.querySelector('input[type="text"]').value.trim(), completed: item.querySelector('input[type="checkbox"]').checked }));
-    db.collection('users').doc(currentUser.uid).collection('tasks').doc(detailTaskId).update({ subtasks });
-};
-
-// Task List Actions
-taskListView?.addEventListener('click', (e) => {
-    const taskItem = e.target.closest('.task-item');
-    if (!taskItem || !currentUser) return;
-    const taskId = taskItem.dataset.id;
-    const task = allTasks.find(t => t.id === taskId);
-    const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
-    if (!e.target.closest('.task-actions') && !e.target.matches('.task-checkbox')) {
-        openDetailModal(task);
-    } else if (e.target.matches('.task-checkbox')) {
-        taskRef.update({ status: e.target.checked ? 'completed' : 'todo' });
-    } else if (e.target.closest('.delete-btn')) {
-        taskRef.delete();
-    } else if (e.target.closest('.edit-btn')) {
-        openTaskModal(task);
-    }
-});
-taskBoardView?.addEventListener('click', (e) => {
-    const taskCard = e.target.closest('.task-card-board');
-    if (taskCard) openDetailModal(allTasks.find(t => t.id === taskCard.dataset.id));
-});
-
-// Filters & Search
-searchInput?.addEventListener('input', () => {
-    currentSearchTerm = searchInput.value.toLowerCase().trim();
-    renderCurrentView();
-});
-
-statusFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { statusFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentStatusFilter = e.target.dataset.filter; renderCurrentView(); } });
-categoryFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { if(categoryFilters.querySelector('.active')) categoryFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentCategoryFilter = e.target.dataset.filter; renderCurrentView(); } });
-priorityFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { priorityFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentPriorityFilter = e.target.dataset.priority; renderCurrentView(); } });
-
-// New Feature Listeners
-if(enableNotificationsBtn) enableNotificationsBtn.addEventListener('click', setupNotifications);
-if(voiceAddTaskBtn) voiceAddTaskBtn.addEventListener('click', handleVoiceInput);
-
 
 // --- Utility Functions --- //
 function shadeColor(color, percent) {
@@ -697,6 +540,10 @@ function shadeColor(color, percent) {
 
 // --- Initial Setup on DOMContentLoaded --- //
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize Flatpickr instances
+    datePicker = flatpickr(deadlineDateInput, { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y" });
+    timePicker = flatpickr(deadlineTimeInput, { enableTime: true, noCalendar: true, dateFormat: "H:i", altInput: true, altFormat: "h:i K" });
+    
     // Initialize Accent Color Picker
     if (accentColorPicker) {
         accentColors.forEach(color => {
@@ -709,17 +556,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initialize Date Filter
-    const mainFiltersContainer = document.querySelector('.main-filters');
-    if (mainFiltersContainer) {
-        const dateFilterWrapper = document.createElement('div');
-        dateFilterWrapper.className = 'date-filter-wrapper';
-        dateFilterWrapper.innerHTML = `
-            <input type="text" id="date-filter-input" placeholder="Filter by date...">
-            <button id="clear-date-filter" class="clear-btn hide">&times;</button>
-        `;
-        mainFiltersContainer.appendChild(dateFilterWrapper);
-        const dateFilterInput = document.getElementById('date-filter-input');
-        const clearDateFilterBtn = document.getElementById('clear-date-filter');
+    const dateFilterInput = document.getElementById('date-filter-input');
+    const clearDateFilterBtn = document.getElementById('clear-date-filter');
+    if(dateFilterInput) {
         dateFilterInstance = flatpickr(dateFilterInput, {
             dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y",
             onChange: function(selectedDates) {
@@ -734,9 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add Calendar Default View setting to Profile page
     const calendarLayoutLabel = document.querySelector('label input[value="calendar"]');
     if (calendarLayoutLabel) {
-        const calendarSettings = document.createElement('div');
-        calendarSettings.id = 'calendar-settings';
-        calendarSettings.className = 'calendar-settings hide';
+        const calendarSettings = document.getElementById('calendar-settings');
         calendarSettings.innerHTML = `
             <label>Default Calendar View</label>
             <div class="layout-switcher">
@@ -744,13 +581,185 @@ document.addEventListener('DOMContentLoaded', () => {
                 <label><input type="radio" name="calendar-default" value="weekly"> Week</label>
             </div>
         `;
-        calendarLayoutLabel.parentElement.appendChild(calendarSettings);
-        
         document.querySelectorAll('input[name="layout"]').forEach(input => {
             input.addEventListener('change', (e) => {
                  document.getElementById('calendar-settings').classList.toggle('hide', e.target.value !== 'calendar');
             });
         });
     }
+    
+    // --- ALL EVENT LISTENERS --- //
+    
+    // Auth & Nav
+    auth.onAuthStateChanged(updateUIforLoginState);
+    backBtn?.addEventListener('click', () => showPage('todo-page'));
+    logo?.addEventListener('click', () => { if (currentUser) showPage('todo-page'); });
+    signinLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
+    signupLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
+    profileLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('profile-page'); profileDropdown.classList.remove('show'); });
+    showSignup?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
+    showSignin?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
+    logoutBtn?.addEventListener('click', () => auth.signOut());
+    profileMenu?.addEventListener('click', (e) => { e.stopPropagation(); profileDropdown.classList.toggle('show'); });
+    window.addEventListener('click', () => { if (profileDropdown?.classList.contains('show')) profileDropdown.classList.remove('show'); });
+
+    signupForm?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const userEmail = signupEmailInput.value;
+        const userPassword = signupPasswordInput.value;
+        auth.createUserWithEmailAndPassword(userEmail, userPassword)
+            .then(cred => db.collection('users').doc(cred.user.uid).set({
+                displayName: userEmail.split('@')[0],
+                email: userEmail.toLowerCase(),
+                preferences: { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' }
+            }))
+            .catch(error => showFeedback(signupFeedback, error.message, 'error'));
+    });
+    signinForm?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        auth.signInWithEmailAndPassword(signinEmailInput.value, signinPasswordInput.value)
+            .catch(error => showFeedback(signinFeedback, error.message, 'error'));
+    });
+
+    // Profile & Preferences
+    profileForm?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!currentUser) return;
+        db.collection('users').doc(currentUser.uid).set({
+            displayName: displayNameInput.value,
+            preferences: userPreferences
+        }, { merge: true }).then(() => showFeedback(profileFeedback, "Profile saved!", "success"))
+        .catch(error => showFeedback(profileFeedback, error.message, "error"));
+    });
+    profilePhotoInput?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file || !currentUser) return;
+        storage.ref(`profile_photos/${currentUser.uid}/${file.name}`).put(file)
+            .then(snapshot => snapshot.ref.getDownloadURL()
+            .then(url => db.collection('users').doc(currentUser.uid).set({ photoURL: url }, { merge: true })));
+    });
+    themeToggle?.addEventListener('change', (e) => { userPreferences.theme = e.target.checked ? 'dark' : 'light'; applyUserPreferences(userPreferences); });
+    accentColorPicker?.addEventListener('click', (e) => { if (e.target.matches('.color-swatch')) { userPreferences.accentColor = e.target.dataset.color; applyUserPreferences(userPreferences); } });
+    layoutSwitcher?.addEventListener('change', (e) => { 
+        if (e.target.matches('input[name="layout"]')) {
+            userPreferences.layout = e.target.value; 
+            applyUserPreferences(userPreferences); 
+            renderCurrentView(); 
+        }
+        if (e.target.matches('input[name="calendar-default"]')) {
+            userPreferences.calendarDefault = e.target.value;
+            calendarMode = e.target.value;
+        }
+    });
+
+    // Task & Modal Actions
+    addTaskBtn?.addEventListener('click', () => openTaskModal());
+    cancelTaskBtn?.addEventListener('click', () => taskModal.classList.add('hide'));
+    detailCloseBtn?.addEventListener('click', () => taskDetailModal.classList.add('hide'));
+    
+    saveTaskBtn?.addEventListener('click', () => {
+        if (!currentUser || !taskInput.value.trim()) return;
+
+        let category = categorySelect.value === 'custom' ? customCategoryInput.value.trim() || 'Uncategorized' : categorySelect.value;
+        const deadlineDateVal = datePicker.selectedDates[0];
+        const deadlineTimeVal = timePicker.selectedDates[0];
+        let deadline = null;
+        if (deadlineDateVal) {
+            deadline = new Date(deadlineDateVal);
+            if (deadlineTimeVal) {
+                deadline.setHours(deadlineTimeVal.getHours(), deadlineTimeVal.getMinutes(), 0, 0);
+            }
+        }
+        const subtasks = Array.from(subtaskList.querySelectorAll('.subtask-item input[type="text"]'))
+            .map(input => ({ text: input.value.trim(), completed: false }))
+            .filter(sub => sub.text);
+        const status = taskStatusSelect ? taskStatusSelect.value : 'todo';
+        const taskData = { text: taskInput.value.trim(), priority: prioritySelect.value, status: status, deadline: deadline ? firebase.firestore.Timestamp.fromDate(deadline) : null, category, subtasks };
+        const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks');
+        
+        if (editingTaskId) {
+            taskRef.doc(editingTaskId).update(taskData);
+        } else {
+            taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            taskRef.add(taskData);
+        }
+        taskModal.classList.add('hide');
+    });
+    
+    categorySelect?.addEventListener('change', () => customCategoryInput.classList.toggle('hide', categorySelect.value !== 'custom'));
+
+    // Subtasks
+    subtaskAddBtn?.addEventListener('click', () => {
+        if (subtaskInput.value.trim()) {
+            renderSubtaskInModal({ text: subtaskInput.value.trim(), completed: false }, subtaskList, false);
+            subtaskInput.value = '';
+        }
+    });
+    subtaskList?.addEventListener('click', (e) => { if (e.target.closest('.delete-subtask-btn')) e.target.closest('.subtask-item').remove(); });
+
+    detailSubtaskAddBtn?.addEventListener('click', () => {
+        if (detailSubtaskInput.value.trim()) {
+            renderSubtaskInModal({ text: detailSubtaskInput.value.trim(), completed: false }, detailSubtaskList, true);
+            detailSubtaskInput.value = '';
+            saveSubtasksFromDetail();
+        }
+    });
+    detailSubtaskList?.addEventListener('click', (e) => {
+        if (e.target.closest('.delete-subtask-btn')) e.target.closest('.subtask-item').remove();
+        if (e.target.matches('input[type="checkbox"]')) e.target.closest('.subtask-item').classList.toggle('completed');
+        saveSubtasksFromDetail();
+    });
+    const saveSubtasksFromDetail = () => {
+        if (!currentUser || !detailTaskId) return;
+        const subtasks = Array.from(detailSubtaskList.querySelectorAll('.subtask-item')).map(item => ({ text: item.querySelector('input[type="text"]').value.trim(), completed: item.querySelector('input[type="checkbox"]').checked }));
+        db.collection('users').doc(currentUser.uid).collection('tasks').doc(detailTaskId).update({ subtasks });
+    };
+
+    // Task List Actions
+    taskListView?.addEventListener('click', (e) => {
+        const taskItem = e.target.closest('.task-item');
+        if (!taskItem || !currentUser) return;
+        const taskId = taskItem.dataset.id;
+        const task = allTasks.find(t => t.id === taskId);
+        const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
+        
+        if (e.target.matches('.task-checkbox')) {
+            taskRef.update({ status: e.target.checked ? 'completed' : 'todo' });
+        } else if (e.target.closest('.delete-btn')) {
+            taskRef.delete();
+        } else if (e.target.closest('.edit-btn')) {
+            openTaskModal(task);
+        } else if (!e.target.matches('.share-checkbox')) {
+            openDetailModal(task);
+        }
+    });
+
+    taskBoardView?.addEventListener('click', (e) => {
+        const taskCard = e.target.closest('.task-card-board');
+        if (taskCard) openDetailModal(allTasks.find(t => t.id === taskCard.dataset.id));
+    });
+
+    // Filters & Search
+    searchInput?.addEventListener('input', () => { currentSearchTerm = searchInput.value.toLowerCase().trim(); renderCurrentView(); });
+    statusFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { statusFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentStatusFilter = e.target.dataset.filter; renderCurrentView(); } });
+    categoryFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { if(categoryFilters.querySelector('.active')) categoryFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentCategoryFilter = e.target.dataset.filter; renderCurrentView(); } });
+    priorityFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { priorityFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentPriorityFilter = e.target.dataset.priority; renderCurrentView(); } });
+
+    // New Feature Listeners
+    if(enableNotificationsBtn) enableNotificationsBtn.addEventListener('click', setupNotifications);
+    if(voiceAddTaskBtn) voiceAddTaskBtn.addEventListener('click', handleVoiceInput);
+
+    // Mode Toggle
+    modeToggle?.addEventListener('change', (e) => {
+        const isTeamMode = e.target.checked;
+        if (isTeamMode) {
+            if (typeof initTeamMode === 'function') initTeamMode();
+            else console.error("teammode.js functions not loaded.");
+        } else {
+            if (typeof tearDownTeamMode === 'function') tearDownTeamMode();
+            else console.error("teammode.js functions not loaded.");
+            listenForTasks(); 
+        }
+    });
 });
 
