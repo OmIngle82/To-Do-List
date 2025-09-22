@@ -1,9 +1,9 @@
-// This file should be loaded after the main script.js
-
 // --- DOM Elements --- //
 const teamControlsContainer = document.querySelector('.team-controls-container');
 const shareTasksBtn = document.getElementById('share-tasks-btn');
+const assignTasksBtn = document.getElementById('assign-tasks-btn'); // New Assign button
 const shareTaskModal = document.getElementById('share-task-modal');
+const shareModalTitle = document.getElementById('share-modal-title');
 const shareTaskForm = document.getElementById('share-task-form');
 const cancelShareBtn = document.getElementById('cancel-share-btn');
 const shareEmailInput = document.getElementById('share-email-input');
@@ -11,131 +11,105 @@ const taskListViewForTeam = document.getElementById('task-list-view');
 const teamWelcomeModal = document.getElementById('team-welcome-modal');
 const startTeamModeBtn = document.getElementById('start-team-mode-btn');
 const welcomeUserName = document.getElementById('welcome-user-name');
-
-// Create and inject a feedback element into the share modal for non-disruptive messages
 let shareModalFeedback;
 if (shareTaskForm) {
     shareModalFeedback = document.createElement('p');
     shareModalFeedback.className = 'feedback';
-    // Insert it before the modal action buttons
     const modalActions = shareTaskForm.querySelector('.modal-actions');
-    if (modalActions) {
-        shareTaskForm.insertBefore(shareModalFeedback, modalActions);
-    }
+    if (modalActions) shareTaskForm.insertBefore(shareModalFeedback, modalActions);
 }
 
-
 // --- Team Mode State --- //
-let isSharingActive = false;
-let tasksToShare = new Set();
-let sendSharedTasksBtn = null;
+let teamModeActive = false;
+let currentTeamAction = null; // Can be 'share' or 'assign'
+let tasksToProcess = new Set();
+let sendTasksBtn = null;
 let unsubscribeTeamTasks;
 
-
 // --- Main Team Mode Functions --- //
-
-/**
- * Initializes Team Mode.
- * This function is called from script.js when the toggle is switched to "Team".
- */
 function initTeamMode() {
     if (currentUser && displayNameInput) {
         welcomeUserName.textContent = `Welcome, ${displayNameInput.value || 'User'}!`;
     }
     teamWelcomeModal.classList.remove('hide');
-    
-    // Attach listeners
-    startTeamModeBtn.addEventListener('click', handleStartTeamMode);
-    shareTasksBtn.addEventListener('click', toggleSharingState);
-    taskListViewForTeam.addEventListener('change', handleShareCheckboxChange);
-    shareTaskForm.addEventListener('submit', handleShareFormSubmit);
-    cancelShareBtn.addEventListener('click', closeShareModal);
+    startTeamModeBtn.addEventListener('click', handleStartTeamMode, { once: true });
+    shareTasksBtn.addEventListener('click', () => toggleSelectionMode('share'));
+    assignTasksBtn.addEventListener('click', () => toggleSelectionMode('assign'));
+    taskListViewForTeam.addEventListener('change', handleSelectionCheckboxChange);
+    shareTaskForm.addEventListener('submit', handleSendFormSubmit);
+    cancelShareBtn.addEventListener('click', closeSendModal);
 }
 
-/**
- * Tears down Team Mode.
- * Called from script.js when switching back to "Simple" mode.
- */
 function tearDownTeamMode() {
     teamControlsContainer.classList.add('hide');
-    if (isSharingActive) {
-        toggleSharingState(); // Gracefully exit sharing mode if active
+    if (teamModeActive) {
+        toggleSelectionMode(null);
     }
-    if (sendSharedTasksBtn) {
-        sendSharedTasksBtn.classList.add('hide');
+    if (sendTasksBtn) {
+        sendTasksBtn.remove();
+        sendTasksBtn = null;
     }
     if (unsubscribeTeamTasks) unsubscribeTeamTasks();
+    teamModeActive = false;
 }
 
-/**
- * Handles the click on the "Let's Start" button in the welcome modal.
- */
 function handleStartTeamMode() {
     teamWelcomeModal.classList.add('hide');
     teamControlsContainer.classList.remove('hide');
-
-    // Dynamically create the "Send Selected" button if it doesn't exist
-    if (!document.getElementById('send-shared-tasks-btn')) {
-        sendSharedTasksBtn = document.createElement('button');
-        sendSharedTasksBtn.id = 'send-shared-tasks-btn';
-        sendSharedTasksBtn.className = 'hide'; // Hide it initially
-        sendSharedTasksBtn.innerHTML = `<i class="fas fa-paper-plane"></i> Send Selected`;
-        teamControlsContainer.appendChild(sendSharedTasksBtn);
-        sendSharedTasksBtn.addEventListener('click', openShareModal);
+    teamModeActive = true;
+    if (!document.getElementById('send-tasks-btn')) {
+        sendTasksBtn = document.createElement('button');
+        sendTasksBtn.id = 'send-tasks-btn';
+        sendTasksBtn.className = 'hide';
+        // Prepend it inside the team controls container for better layout control
+        teamControlsContainer.prepend(sendTasksBtn);
+        sendTasksBtn.addEventListener('click', openSendModal);
     }
-    
     listenForTeamTasks();
 }
 
-/**
- * Listens for tasks in team mode. It's the same collection, but this ensures
- * the listener is active when in team mode.
- */
 function listenForTeamTasks() {
     if (!currentUser) return;
     if (unsubscribeTeamTasks) unsubscribeTeamTasks();
-
     unsubscribeTeamTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('createdAt', 'desc')
         .onSnapshot(snapshot => {
             allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            renderAll(); // Use the main render function
+            renderAll();
         });
 }
 
-
-/**
- * Toggles the app in and out of "task selection" mode.
- */
-function toggleSharingState() {
-    isSharingActive = !isSharingActive;
-    shareTasksBtn.classList.toggle('active', isSharingActive);
-    shareTasksBtn.innerHTML = isSharingActive ?
-        `<i class="fas fa-times"></i> Cancel` :
-        `<i class="fas fa-share-alt"></i> Share`;
+function toggleSelectionMode(action) {
+    // If the same button is clicked again, treat it as a cancel action.
+    const isCancelling = currentTeamAction === action;
     
-    toggleShareCheckboxesVisibility(isSharingActive);
-
-    if (!isSharingActive) {
-        tasksToShare.clear();
-        updateSendButtonVisibility();
+    // Clear any previous active state
+    shareTasksBtn.classList.remove('active');
+    assignTasksBtn.classList.remove('active');
+    
+    currentTeamAction = isCancelling ? null : action;
+    
+    // Set the new active state if not cancelling
+    if (currentTeamAction) {
+        document.getElementById(`${currentTeamAction}-tasks-btn`).classList.add('active');
     }
+    
+    toggleSelectionCheckboxesVisibility(!isCancelling, currentTeamAction);
+
+    tasksToProcess.clear();
+    updateSendButtonVisibility();
 }
 
-/**
- * Shows or hides share checkboxes on all eligible tasks.
- * @param {boolean} show - Whether to show or hide the checkboxes.
- */
-function toggleShareCheckboxesVisibility(show) {
-    const taskItems = taskListViewForTeam.querySelectorAll('.task-item');
-    taskItems.forEach(item => {
+
+function toggleSelectionCheckboxesVisibility(show, action) {
+    taskListViewForTeam.querySelectorAll('.task-item').forEach(item => {
         const taskId = item.dataset.id;
         const task = allTasks.find(t => t.id === taskId);
         const checkboxWrapper = item.querySelector('.share-checkbox-wrapper');
-
         if (checkboxWrapper) {
-            // Only add checkboxes to tasks that are not already shared with the current user
-            if (show && task && !task.sharedBy) {
-                checkboxWrapper.innerHTML = `<input type="checkbox" class="share-checkbox" data-task-id="${taskId}">`;
+            const isEligible = task && !task.sharedBy && !task.assignedBy && !task.assignedTo;
+            if (show && isEligible) {
+                const colorVar = action === 'assign' ? 'var(--assign-color)' : 'var(--team-color)';
+                checkboxWrapper.innerHTML = `<input type="checkbox" class="share-checkbox" data-task-id="${taskId}" style="accent-color: ${colorVar};">`;
             } else {
                 checkboxWrapper.innerHTML = '';
             }
@@ -143,72 +117,57 @@ function toggleShareCheckboxesVisibility(show) {
     });
 }
 
-/**
- * Handles change events on any share checkbox.
- * @param {Event} e - The change event.
- */
-function handleShareCheckboxChange(e) {
+function handleSelectionCheckboxChange(e) {
     if (!e.target.matches('.share-checkbox')) return;
-    
     const taskId = e.target.dataset.taskId;
-    if (e.target.checked) {
-        tasksToShare.add(taskId);
-    } else {
-        tasksToShare.delete(taskId);
-    }
+    if (e.target.checked) tasksToProcess.add(taskId);
+    else tasksToProcess.delete(taskId);
     updateSendButtonVisibility();
 }
 
-/**
- * Shows or hides the "Send Selected" button based on selection.
- */
 function updateSendButtonVisibility() {
-    if (sendSharedTasksBtn) {
-       sendSharedTasksBtn.classList.toggle('hide', tasksToShare.size === 0);
+    if (!sendTasksBtn) return;
+    const hasSelection = tasksToProcess.size > 0;
+    sendTasksBtn.classList.toggle('hide', !hasSelection);
+    if (hasSelection) {
+        const actionText = currentTeamAction.charAt(0).toUpperCase() + currentTeamAction.slice(1);
+        sendTasksBtn.innerHTML = `<i class="fas fa-paper-plane"></i> ${actionText} ${tasksToProcess.size} Task(s)`;
+        const colorVar = `var(--${currentTeamAction === 'assign' ? 'assign-color' : 'team-color'})`;
+        sendTasksBtn.style.backgroundColor = colorVar;
     }
 }
 
-/**
- * Shows feedback inside the share modal.
- * @param {string} message The message to display.
- * @param {string} type 'success' or 'error'.
- */
+
 function showShareFeedback(message, type) {
     if (shareModalFeedback) {
         shareModalFeedback.textContent = message;
-        shareModalFeedback.className = 'feedback'; // Reset classes
-        shareModalFeedback.classList.add(type);
+        shareModalFeedback.className = 'feedback ' + type;
     }
 }
 
-function openShareModal() {
-    // The button to open this modal is hidden if no tasks are selected, so an alert isn't necessary.
-    if (tasksToShare.size > 0) {
-        if (shareModalFeedback) shareModalFeedback.textContent = ''; // Clear previous feedback
+function openSendModal() {
+    if (tasksToProcess.size > 0) {
+        shareModalTitle.textContent = currentTeamAction === 'assign' ? 'Assign Selected Tasks' : 'Share Selected Tasks';
+        if (shareModalFeedback) shareModalFeedback.textContent = '';
         shareTaskModal.classList.remove('hide');
     }
 }
 
-function closeShareModal() {
+function closeSendModal() {
     shareTaskModal.classList.add('hide');
     shareTaskForm.reset();
-    if (shareModalFeedback) shareModalFeedback.textContent = ''; // Clear feedback on close
+    if (shareModalFeedback) shareModalFeedback.textContent = '';
 }
 
-/**
- * Handles the submission of the share tasks form.
- * @param {Event} e - The form submission event.
- */
-async function handleShareFormSubmit(e) {
+async function handleSendFormSubmit(e) {
     e.preventDefault();
-    if (shareModalFeedback) shareModalFeedback.textContent = ''; // Clear previous feedback
+    if (shareModalFeedback) shareModalFeedback.textContent = '';
 
     const recipientEmail = shareEmailInput.value.trim().toLowerCase();
     const sharer = auth.currentUser;
 
-    if (!recipientEmail || !sharer) return;
-    if (recipientEmail === sharer.email) {
-        showShareFeedback("You cannot share tasks with yourself.", "error");
+    if (!recipientEmail || !sharer || recipientEmail === sharer.email) {
+        showShareFeedback("Invalid email or you cannot send tasks to yourself.", "error");
         return;
     }
 
@@ -218,12 +177,10 @@ async function handleShareFormSubmit(e) {
     submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending...`;
 
     try {
-        // 1. Find the recipient user by their email
         const usersRef = db.collection('users');
         const querySnapshot = await usersRef.where('email', '==', recipientEmail).get();
-
         if (querySnapshot.empty) {
-            showShareFeedback('User not found. Please check the email address.', 'error');
+            showShareFeedback('User not found. Please check the email.', 'error');
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalBtnText;
             return;
@@ -231,49 +188,77 @@ async function handleShareFormSubmit(e) {
 
         const recipient = querySnapshot.docs[0];
         const recipientUid = recipient.id;
-        const sharerDisplayName = sharer.displayName || sharer.email.split('@')[0];
-
-        // 2. Create a batch write to add all tasks atomically
-        const batch = db.batch();
-        const recipientTasksRef = db.collection('users').doc(recipientUid).collection('tasks');
-
-        tasksToShare.forEach(taskId => {
-            const originalTask = allTasks.find(t => t.id === taskId);
-            if (originalTask && !originalTask.sharedBy) { // Double check it's not a task shared with you
-                const { id, ...taskData } = originalTask;
-                const newTaskPayload = {
-                    ...taskData,
-                    status: 'todo', // Shared tasks should start as 'todo' for the recipient
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    sharedBy: { // This object structure is important for the security rule
-                        name: sharerDisplayName,
-                        uid: sharer.uid
-                    }
-                };
-                // Add the new task to the batch, letting Firestore generate a new doc ID
-                const newDocRef = recipientTasksRef.doc();
-                batch.set(newDocRef, newTaskPayload);
-            }
-        });
-
-        // 3. Commit the batch
-        await batch.commit();
+        const recipientData = recipient.data();
         
-        showShareFeedback(`Successfully shared ${tasksToShare.size} task(s)!`, 'success');
+        if (currentTeamAction === 'share') {
+            await executeShare(recipientUid);
+        } else if (currentTeamAction === 'assign') {
+            await executeAssign(recipientUid, recipientData.displayName || recipientEmail.split('@')[0]);
+        }
         
-        // 4. Reset UI after a delay to show the success message
+        showShareFeedback(`Successfully sent ${tasksToProcess.size} task(s)!`, 'success');
+        
         setTimeout(() => {
-            closeShareModal();
-            toggleSharingState(); // Exits sharing mode
+            closeSendModal();
+            toggleSelectionMode(null);
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalBtnText;
         }, 1500);
 
     } catch (error) {
-        console.error("Error sharing tasks: ", error);
-        showShareFeedback('An error occurred while sharing tasks. Please try again.', 'error');
+        console.error(`Error processing '${currentTeamAction}' action:`, error);
+        showShareFeedback('An error occurred. Please try again.', 'error');
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalBtnText;
     }
+}
+
+async function executeShare(recipientUid) {
+    const sharerDisplayName = currentUser.displayName || currentUser.email.split('@')[0];
+    const batch = db.batch();
+    const recipientTasksRef = db.collection('users').doc(recipientUid).collection('tasks');
+    tasksToProcess.forEach(taskId => {
+        const originalTask = allTasks.find(t => t.id === taskId);
+        if (originalTask) {
+            const { id, ...taskData } = originalTask;
+            const newDocRef = recipientTasksRef.doc();
+            batch.set(newDocRef, {
+                ...taskData, status: 'todo', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                sharedBy: { name: sharerDisplayName, uid: currentUser.uid }
+            });
+        }
+    });
+    await batch.commit();
+}
+
+async function executeAssign(recipientUid, recipientName) {
+    const batch = db.batch();
+    const senderTasksRef = db.collection('users').doc(currentUser.uid).collection('tasks');
+    const recipientTasksRef = db.collection('users').doc(recipientUid).collection('tasks');
+    const senderName = currentUser.displayName || currentUser.email.split('@')[0];
+
+    for (const taskId of tasksToProcess) {
+        const originalTask = allTasks.find(t => t.id === taskId);
+        if (originalTask) {
+            const { id, ...taskData } = originalTask;
+            const newRecipientTaskRef = recipientTasksRef.doc();
+            
+            // 1. Create a new task for the recipient
+            batch.set(newRecipientTaskRef, {
+                ...taskData, status: 'todo', category: 'Assigned',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                assignedBy: { name: senderName, uid: currentUser.uid },
+                originalTaskId: taskId,
+                originalAssignerUid: currentUser.uid,
+            });
+
+            // 2. Update the original task on the sender's list
+            const originalTaskRef = senderTasksRef.doc(taskId);
+            batch.update(originalTaskRef, {
+                assignedTo: { name: recipientName, uid: recipientUid, status: 'pending' }
+            });
+        }
+    }
+    await batch.commit();
 }
 

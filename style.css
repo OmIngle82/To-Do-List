@@ -37,6 +37,7 @@
     --standout-hover: #248a7f;
     --glow-color: #f07167;
     --team-color: #00afb9;
+    --assign-color: #9d4edd; /* New color for assignments */
 }
 
 /* Dark Theme Variables */
@@ -62,6 +63,7 @@ body.dark-theme {
     --standout-hover: #47a177;
     --glow-color: #ff4d6d;
     --team-color: #ade8f4;
+    --assign-color: #c77dff; /* New color for assignments in dark mode */
 }
 
 /* Basic Reset */
@@ -338,7 +340,7 @@ body.dark-theme .mode-toggle input:checked + .slider .team {
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
-    flex-wrap: wrap; /* For responsiveness */
+    flex-wrap: wrap;
 }
 #category-filters {
     flex-grow: 1;
@@ -347,18 +349,14 @@ body.dark-theme .mode-toggle input:checked + .slider .team {
 /* --- Team Mode Styles --- */
 .team-controls-container {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    align-items: flex-end; /* Align buttons to the right */
+    gap: 0.75rem;
+    align-items: center;
 }
-#share-tasks-btn {
-    border: 2px solid var(--team-color);
-    color: var(--team-color);
+#share-tasks-btn, #assign-tasks-btn {
+    border: 2px solid;
     background-color: transparent;
     border-radius: 25px;
     padding: 0.5rem 1rem;
-    width: auto;
-    height: auto;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -366,23 +364,23 @@ body.dark-theme .mode-toggle input:checked + .slider .team {
     cursor: pointer;
     transition: all 0.3s;
 }
-#share-tasks-btn:hover {
-    background-color: var(--team-color);
-    color: var(--text-light);
-}
-body.dark-theme #share-tasks-btn:hover {
+
+#share-tasks-btn { border-color: var(--team-color); color: var(--team-color); }
+#assign-tasks-btn { border-color: var(--assign-color); color: var(--assign-color); }
+
+#share-tasks-btn:hover { background-color: var(--team-color); color: var(--text-light); }
+#assign-tasks-btn:hover { background-color: var(--assign-color); color: var(--text-light); }
+
+body.dark-theme #share-tasks-btn:hover, body.dark-theme #assign-tasks-btn:hover {
     color: var(--bg-color);
 }
-/* Make the cancel button red for clear user feedback */
-#share-tasks-btn.active {
+#share-tasks-btn.active, #assign-tasks-btn.active {
     background-color: var(--error-color);
     border-color: var(--error-color);
     color: var(--text-light);
-    animation: none; /* Turn off glowing when active */
 }
-/* Style for the "Send Selected" button */
-#send-shared-tasks-btn {
-    background-color: var(--team-color);
+#send-tasks-btn {
+    background-color: var(--team-color); /* Default, will be changed by JS */
     color: var(--text-light);
     border: none;
     padding: 0.75rem 1rem;
@@ -397,33 +395,29 @@ body.dark-theme #share-tasks-btn:hover {
     gap: 0.5rem;
     margin-top: 0.5rem;
 }
-#send-shared-tasks-btn:hover {
+#send-tasks-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
-body.dark-theme #send-shared-tasks-btn { color: var(--bg-color); }
-
+body.dark-theme #send-tasks-btn { color: var(--bg-color); }
 
 /* --- Task List --- */
 #task-list-view { list-style: none; }
 .task-item { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--task-item-bg); border-radius: 8px; margin-bottom: 0.75rem; border-left: 5px solid; cursor: pointer; transition: box-shadow .2s; }
 .task-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 
-/* Wrapper for the share checkbox to reserve space and position it */
 .share-checkbox-wrapper {
-    width: 20px; /* Same width as the other checkbox */
+    width: 20px;
     height: 20px;
     transition: all 0.3s ease;
     display: flex;
     justify-content: center;
     align-items: center;
 }
-/* Hide the wrapper's width when not sharing */
 .share-checkbox-wrapper:empty {
     width: 0;
-    overflow: hidden; /* Prevent content from briefly appearing during transition */
+    overflow: hidden;
 }
-
 
 .task-item[data-priority="high"] { border-left-color: var(--priority-high); }
 .task-item[data-priority="medium"] { border-left-color: var(--priority-medium); }
@@ -441,23 +435,28 @@ body.dark-theme #send-shared-tasks-btn { color: var(--bg-color); }
     display: flex; 
     gap: 0.75rem; 
     align-items: center;
-    flex-shrink: 0; /* Prevents the container from shrinking and wrapping */
+    flex-shrink: 0;
 }
 .task-actions button { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; transition: color 0.3s; z-index: 2; }
 .edit-btn { color: var(--primary-color); }
 .delete-btn { color: var(--error-color); }
-.shared-by-tag {
+.team-tag {
     font-size: 0.75rem;
     font-style: italic;
     color: var(--completed-color);
     background-color: var(--bg-color);
-    padding: 2px 6px;
+    padding: 2px 8px;
     border-radius: 10px;
     margin-top: 0.5rem;
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.4rem;
+    border: 1px solid var(--border-color);
 }
+.team-tag.shared-by { color: var(--team-color); }
+.team-tag.assigned-by { color: var(--assign-color); }
+.team-tag.assigned-to { background-color: var(--assign-color); color: var(--text-light); }
+.team-tag.assigned-to.completed { background-color: var(--success-color); }
 
 /* --- Board View --- */
 #task-board-view { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
@@ -556,5 +555,3 @@ body.dark-theme #send-shared-tasks-btn { color: var(--bg-color); }
     .day-cell { min-height: 80px; font-size: 0.9rem; }
     .calendar-task-event { font-size: 0.7rem; }
 }
-
-

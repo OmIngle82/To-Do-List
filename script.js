@@ -72,7 +72,6 @@ const accentColors = ['#d4a373', '#f07167', '#00afb9', '#9d4edd', '#fb8500'];
 // --- Initializations --- //
 let datePicker, timePicker, dateFilterInstance;
 
-// Initialize Speech Recognition
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition;
 if (SpeechRecognition) {
@@ -80,7 +79,6 @@ if (SpeechRecognition) {
     recognition.continuous = false;
     recognition.lang = 'en-US';
 }
-
 
 // --- Page & UI Management --- //
 const showPage = (pageId) => {
@@ -92,8 +90,7 @@ const showPage = (pageId) => {
 
 const showFeedback = (element, message, type) => {
     element.textContent = message;
-    element.className = 'feedback';
-    element.classList.add(type);
+    element.className = 'feedback ' + type;
     setTimeout(() => { element.textContent = ''; element.className = 'feedback'; }, 4000);
 };
 
@@ -162,13 +159,7 @@ const listenForTasks = () => {
     if (unsubscribeTasks) unsubscribeTasks();
     unsubscribeTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('createdAt', 'desc')
         .onSnapshot(snapshot => {
-            allTasks = snapshot.docs.map(doc => {
-                const data = doc.data();
-                if (typeof data.completed !== 'undefined' && !data.status) {
-                    data.status = data.completed ? 'completed' : 'todo';
-                }
-                return { id: doc.id, ...data };
-            });
+            allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             renderAll();
         });
 };
@@ -194,9 +185,7 @@ const getFilteredTasks = () => {
         tasksToFilter = tasksToFilter.filter(task => {
             if (!task.deadline || !task.deadline.seconds) return false;
             const taskDate = new Date(task.deadline.seconds * 1000);
-            return taskDate.getFullYear() === selectedDateFilter.getFullYear() &&
-                   taskDate.getMonth() === selectedDateFilter.getMonth() &&
-                   taskDate.getDate() === selectedDateFilter.getDate();
+            return taskDate.toDateString() === selectedDateFilter.toDateString();
         });
     }
 
@@ -206,7 +195,7 @@ const getFilteredTasks = () => {
             (task.category && task.category.toLowerCase().includes(searchTerm));
 
         const statusMatch = currentStatusFilter === 'all' ||
-            (currentStatusFilter === 'pending' && (task.status === 'todo' || task.status === 'inprogress')) ||
+            (currentStatusFilter === 'pending' && task.status !== 'completed') ||
             (currentStatusFilter === 'completed' && task.status === 'completed');
 
         const categoryMatch = currentCategoryFilter === 'all' || task.category === currentCategoryFilter;
@@ -226,18 +215,31 @@ const renderListView = () => {
     }
     filteredTasks.forEach(task => {
         const taskItem = document.createElement('li');
-        taskItem.className = `task-item ${task.status === 'completed' ? 'completed' : ''}`;
+        const isCompleted = task.status === 'completed' || (task.assignedTo && task.assignedTo.status === 'completed');
+        taskItem.className = `task-item ${isCompleted ? 'completed' : ''}`;
         taskItem.dataset.id = task.id;
         taskItem.dataset.priority = task.priority || 'low';
+        
         const deadlineDate = task.deadline ? new Date(task.deadline.seconds * 1000).toLocaleDateString() : '';
         const deadlineTime = task.deadline ? new Date(task.deadline.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
         
-        const sharedByTag = task.sharedBy ?
-            `<div class="shared-by-tag"><i class="fas fa-user-friends"></i> Shared by ${task.sharedBy.name}</div>` : '';
+        let teamTagHTML = '';
+        if (task.sharedBy) {
+            teamTagHTML = `<div class="team-tag shared-by"><i class="fas fa-user-friends"></i> Shared by ${task.sharedBy.name}</div>`;
+        } else if (task.assignedBy) {
+            teamTagHTML = `<div class="team-tag assigned-by"><i class="fas fa-user-check"></i> Assigned by ${task.assignedBy.name}</div>`;
+        } else if (task.assignedTo) {
+            if (task.assignedTo.status === 'completed') {
+                const completedDate = task.assignedTo.completedAt ? new Date(task.assignedTo.completedAt.seconds * 1000).toLocaleDateString() : '';
+                teamTagHTML = `<div class="team-tag assigned-to completed"><i class="fas fa-check-double"></i> Completed by ${task.assignedTo.name} on ${completedDate}</div>`;
+            } else {
+                teamTagHTML = `<div class="team-tag assigned-to"><i class="fas fa-user-clock"></i> Assigned to ${task.assignedTo.name}</div>`;
+            }
+        }
 
         taskItem.innerHTML = `
             <div class="share-checkbox-wrapper"></div>
-            <input type="checkbox" class="task-checkbox" ${task.status === 'completed' ? 'checked' : ''}>
+            <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''}>
             <div class="task-content">
                 <h3>${task.text}</h3>
                 <div class="task-meta">
@@ -245,7 +247,7 @@ const renderListView = () => {
                     ${deadlineDate ? `<span><i class="fas fa-calendar-alt"></i> ${deadlineDate}</span>` : ''}
                     ${deadlineTime ? `<span><i class="fas fa-clock"></i> ${deadlineTime}</span>` : ''}
                 </div>
-                ${sharedByTag}
+                ${teamTagHTML}
             </div>
             <div class="task-actions">
                 <button class="edit-btn"><i class="fas fa-pencil-alt"></i></button>
@@ -255,10 +257,11 @@ const renderListView = () => {
         taskListView.appendChild(taskItem);
     });
 
-    if (typeof isSharingActive !== 'undefined' && isSharingActive) {
-        toggleShareCheckboxesVisibility(true);
+    if (typeof toggleSelectionCheckboxesVisibility === 'function' && typeof currentTeamAction !== 'undefined' && currentTeamAction) {
+        toggleSelectionCheckboxesVisibility(true, currentTeamAction);
     }
 };
+
 
 const renderBoardView = () => {
     if (!taskBoardView) return;
@@ -406,6 +409,9 @@ const renderCategoryFilters = () => {
     if (!categoryFilters) return;
     const categories = [...new Set(allTasks.map(task => task.category).filter(Boolean))];
     let buttonsHTML = `<button class="filter-btn ${currentCategoryFilter === 'all' ? 'active' : ''}" data-filter="all">All Categories</button>`;
+    if (allTasks.some(t => t.category === 'Assigned')) {
+        if (!categories.includes('Assigned')) categories.unshift('Assigned');
+    }
     categories.forEach(cat => {
         buttonsHTML += `<button class="filter-btn ${currentCategoryFilter === cat ? 'active' : ''}" data-filter="${cat}">${cat}</button>`;
     });
@@ -540,11 +546,9 @@ function shadeColor(color, percent) {
 
 // --- Initial Setup on DOMContentLoaded --- //
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize Flatpickr instances
     datePicker = flatpickr(deadlineDateInput, { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y" });
     timePicker = flatpickr(deadlineTimeInput, { enableTime: true, noCalendar: true, dateFormat: "H:i", altInput: true, altFormat: "h:i K" });
     
-    // Initialize Accent Color Picker
     if (accentColorPicker) {
         accentColors.forEach(color => {
             const swatch = document.createElement('div');
@@ -555,7 +559,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Initialize Date Filter
     const dateFilterInput = document.getElementById('date-filter-input');
     const clearDateFilterBtn = document.getElementById('clear-date-filter');
     if(dateFilterInput) {
@@ -570,7 +573,6 @@ document.addEventListener('DOMContentLoaded', () => {
         clearDateFilterBtn.addEventListener('click', () => dateFilterInstance.clear());
     }
 
-    // Add Calendar Default View setting to Profile page
     const calendarLayoutLabel = document.querySelector('label input[value="calendar"]');
     if (calendarLayoutLabel) {
         const calendarSettings = document.getElementById('calendar-settings');
@@ -589,8 +591,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- ALL EVENT LISTENERS --- //
-    
-    // Auth & Nav
     auth.onAuthStateChanged(updateUIforLoginState);
     backBtn?.addEventListener('click', () => showPage('todo-page'));
     logo?.addEventListener('click', () => { if (currentUser) showPage('todo-page'); });
@@ -611,7 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(cred => db.collection('users').doc(cred.user.uid).set({
                 displayName: userEmail.split('@')[0],
                 email: userEmail.toLowerCase(),
-                preferences: { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' }
+                preferences: userPreferences
             }))
             .catch(error => showFeedback(signupFeedback, error.message, 'error'));
     });
@@ -621,7 +621,6 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(error => showFeedback(signinFeedback, error.message, 'error'));
     });
 
-    // Profile & Preferences
     profileForm?.addEventListener('submit', (e) => {
         e.preventDefault();
         if (!currentUser) return;
@@ -652,7 +651,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Task & Modal Actions
     addTaskBtn?.addEventListener('click', () => openTaskModal());
     cancelTaskBtn?.addEventListener('click', () => taskModal.classList.add('hide'));
     detailCloseBtn?.addEventListener('click', () => taskDetailModal.classList.add('hide'));
@@ -688,7 +686,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     categorySelect?.addEventListener('change', () => customCategoryInput.classList.toggle('hide', categorySelect.value !== 'custom'));
 
-    // Subtasks
     subtaskAddBtn?.addEventListener('click', () => {
         if (subtaskInput.value.trim()) {
             renderSubtaskInModal({ text: subtaskInput.value.trim(), completed: false }, subtaskList, false);
@@ -715,7 +712,6 @@ document.addEventListener('DOMContentLoaded', () => {
         db.collection('users').doc(currentUser.uid).collection('tasks').doc(detailTaskId).update({ subtasks });
     };
 
-    // Task List Actions
     taskListView?.addEventListener('click', (e) => {
         const taskItem = e.target.closest('.task-item');
         if (!taskItem || !currentUser) return;
@@ -724,7 +720,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
         
         if (e.target.matches('.task-checkbox')) {
-            taskRef.update({ status: e.target.checked ? 'completed' : 'todo' });
+            const isChecked = e.target.checked;
+            
+            // For assigned tasks, don't let the assigner change the status directly.
+            if (task.assignedTo && task.assignedTo.status === 'pending') {
+                e.preventDefault(); // Prevent checkbox from changing visually
+                return;
+            }
+
+            taskRef.update({ status: isChecked ? 'completed' : 'todo' });
+
+            if (isChecked && task.assignedBy && task.originalTaskId && task.originalAssignerUid) {
+                const originalTaskRef = db.collection('users').doc(task.originalAssignerUid).collection('tasks').doc(task.originalTaskId);
+                originalTaskRef.update({
+                    'assignedTo.status': 'completed',
+                    'assignedTo.completedAt': firebase.firestore.FieldValue.serverTimestamp()
+                }).catch(err => console.error("Error updating original assigned task:", err));
+            }
+
         } else if (e.target.closest('.delete-btn')) {
             taskRef.delete();
         } else if (e.target.closest('.edit-btn')) {
@@ -739,17 +752,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (taskCard) openDetailModal(allTasks.find(t => t.id === taskCard.dataset.id));
     });
 
-    // Filters & Search
     searchInput?.addEventListener('input', () => { currentSearchTerm = searchInput.value.toLowerCase().trim(); renderCurrentView(); });
     statusFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { statusFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentStatusFilter = e.target.dataset.filter; renderCurrentView(); } });
     categoryFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { if(categoryFilters.querySelector('.active')) categoryFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentCategoryFilter = e.target.dataset.filter; renderCurrentView(); } });
     priorityFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { priorityFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentPriorityFilter = e.target.dataset.priority; renderCurrentView(); } });
 
-    // New Feature Listeners
     if(enableNotificationsBtn) enableNotificationsBtn.addEventListener('click', setupNotifications);
     if(voiceAddTaskBtn) voiceAddTaskBtn.addEventListener('click', handleVoiceInput);
 
-    // Mode Toggle
     modeToggle?.addEventListener('change', (e) => {
         const isTeamMode = e.target.checked;
         if (isTeamMode) {

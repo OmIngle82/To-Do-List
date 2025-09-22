@@ -5,28 +5,34 @@ service cloud.firestore {
 
     // Rules for the 'users' collection
     match /users/{userId} {
-      // A user can create their own profile when they sign up.
+      // Allow standard profile creation, read, update, and listing users for searching.
       allow create: if request.auth.uid != null;
-      
-      // A user can read or update their OWN profile, but not others'.
       allow read, update: if request.auth.uid == userId;
-
-      // Logged-in users are allowed to list/query the users collection
-      // to find other users by email for sharing.
       allow list: if request.auth.uid != null;
 
       // Rules for the 'tasks' subcollection
       match /tasks/{taskId} {
-        // The owner of the task list has full read and write access.
+        // The owner of the task list has full read and write access to their own tasks.
         allow read, write: if request.auth.uid == userId;
 
-        // Allow another authenticated user to CREATE (share) a task in this list,
-        // provided they properly attribute it to themselves with their UID.
-        // This is the core rule that enables secure task sharing.
+        // --- NEW RULES FOR SHARING & ASSIGNING ---
+
+        // 1. Allow another authenticated user to CREATE (share/assign) a task in this list,
+        //    provided they properly attribute it with a 'sharedBy' or 'assignedBy' field.
         allow create: if request.auth.uid != null &&
                       request.auth.uid != userId &&
-                      request.resource.data.sharedBy.uid == request.auth.uid;
+                      (request.resource.data.sharedBy.uid == request.auth.uid ||
+                       request.resource.data.assignedBy.uid == request.auth.uid);
+
+        // 2. Allow an assignee to UPDATE the original task on the assigner's list,
+        //    but ONLY to mark it as completed. This is the feedback loop.
+        allow update: if request.auth.uid != null &&
+                       request.auth.uid != userId && // Not the owner
+                       request.auth.uid == resource.data.assignedTo.uid && // Is the assignee
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignedTo.status', 'assignedTo.completedAt']) &&
+                       request.resource.data.assignedTo.status == 'completed';
       }
     }
   }
 }
+
