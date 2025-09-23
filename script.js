@@ -47,9 +47,13 @@ const categorySelect = document.getElementById('task-category'), customCategoryI
 const subtaskInput = document.getElementById('subtask-input'), subtaskAddBtn = document.getElementById('subtask-add-btn');
 const subtaskList = document.getElementById('subtask-list'), cancelTaskBtn = document.getElementById('modal-cancel-btn');
 const saveTaskBtn = document.getElementById('modal-save-btn');
-const taskDetailModal = document.getElementById('task-detail-modal'), detailTaskTitle = document.getElementById('detail-task-title');
+const taskDetailModal = document.getElementById('task-detail-modal'), detailTaskTitle = document.getElementById('detail-task-title-full');
 const detailSubtaskList = document.getElementById('detail-subtask-list');
-const detailSubtaskInput = document.getElementById('detail-subtask-input'), detailSubtaskAddBtn = document.getElementById('detail-subtask-add-btn'), detailCloseBtn = document.getElementById('detail-close-btn');
+const detailSubtaskInput = document.getElementById('detail-subtask-input'), detailSubtaskAddBtn = document.getElementById('detail-subtask-add-btn');
+const detailAttachmentsList = document.getElementById('detail-attachments-list');
+const detailCommentsList = document.getElementById('detail-comments-list'), detailCommentForm = document.getElementById('detail-comment-form');
+const detailCommentInput = document.getElementById('detail-comment-input'), detailCloseBtn = document.getElementById('detail-close-btn');
+const taskAttachmentsInput = document.getElementById('task-attachments-input'), attachmentsListModal = document.getElementById('attachments-list-modal');
 const signinFeedback = document.getElementById('signin-feedback'), signupFeedback = document.getElementById('signup-feedback');
 const profileFeedback = document.getElementById('profile-feedback');
 const voiceAddTaskBtn = document.getElementById('voice-add-btn');
@@ -59,15 +63,37 @@ const modeToggle = document.getElementById('mode-toggle-checkbox');
 
 
 // --- App State --- //
-let allTasks = [], currentUser = null;
+let allTasks = [], currentUser = null, currentUserProfile = {};
 let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' };
 let currentStatusFilter = 'all', currentCategoryFilter = 'all', currentPriorityFilter = 'all', currentSearchTerm = '';
 let selectedDateFilter = null;
 let editingTaskId = null, detailTaskId = null;
+let existingAttachments = [];
+let originalAttachmentsBeforeEdit = [];
 let calendarDate = new Date();
 let calendarMode = userPreferences.calendarDefault;
-let unsubscribeTasks, unsubscribeProfile;
+let unsubscribeTasks, unsubscribeProfile, unsubscribeComments, unsubscribeUpdateLog;
 const accentColors = ['#d4a373', '#f07167', '#00afb9', '#9d4edd', '#fb8500'];
+let conversationCreationLocks = new Map();
+let isPostingComment = false;
+let activeListenerToken = null; 
+let lastCommentTime = 0; 
+
+// --- File Upload State --- //
+const MAX_FILE_SIZE_MB = 10;
+const MAX_TOTAL_UPLOAD_MB = 50;
+const ALLOWED_FILE_TYPES = {
+    'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'], 'image/gif': ['.gif'], 'image/webp': ['.webp'], 'image/heic': ['.heic'],
+    'application/pdf': ['.pdf'], 'application/msword': ['.doc'],
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'application/vnd.ms-excel': ['.xls'],
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+    'application/vnd.ms-powerpoint': ['.ppt'],
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+    'text/plain': ['.txt'],
+};
+let filesToUpload = []; // Stores objects: { file, id, progress, status, error }
+
 
 // --- Initializations --- //
 let datePicker, timePicker, dateFilterInstance;
@@ -108,7 +134,9 @@ const updateUIforLoginState = (user) => {
         showPage('signin-page');
         if (unsubscribeTasks) unsubscribeTasks();
         if (unsubscribeProfile) unsubscribeProfile();
+        cleanupCommentListener();
         allTasks = [];
+        currentUserProfile = {};
         applyUserPreferences({});
         renderAll();
     }
@@ -119,15 +147,15 @@ const applyUserPreferences = (prefs = {}) => {
     calendarMode = userPreferences.calendarDefault;
     document.body.classList.toggle('dark-theme', userPreferences.theme === 'dark');
     if(themeToggle) themeToggle.checked = userPreferences.theme === 'dark';
-    
+
     document.querySelectorAll('input[name="layout"]').forEach(input => {
         if(input.value === userPreferences.layout) input.checked = true;
     });
-    
+
     document.querySelectorAll('input[name="calendar-default"]').forEach(input => {
         if(input.value === userPreferences.calendarDefault) input.checked = true;
     });
-    
+
     if(taskListView) taskListView.classList.toggle('hide', userPreferences.layout !== 'list');
     if(taskBoardView) taskBoardView.classList.toggle('hide', userPreferences.layout !== 'board');
     if (calendarView) calendarView.classList.toggle('hide', userPreferences.layout !== 'calendar');
@@ -144,12 +172,12 @@ const listenForProfile = () => {
     if (unsubscribeProfile) unsubscribeProfile();
     unsubscribeProfile = db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
         if (doc.exists) {
-            const userData = doc.data();
-            if(displayNameInput) displayNameInput.value = userData.displayName || '';
-            const photoURL = userData.photoURL || 'https://placehold.co/100x100/d4a373/fefae0?text=User';
-            if(profilePhotoPreview) profilePhotoPreview.src = photoURL; 
+            currentUserProfile = { id: doc.id, ...doc.data() };
+            if(displayNameInput) displayNameInput.value = currentUserProfile.displayName || '';
+            const photoURL = currentUserProfile.photoURL || 'https://placehold.co/100x100/d4a373/fefae0?text=User';
+            if(profilePhotoPreview) profilePhotoPreview.src = photoURL;
             if(menuProfilePhoto) menuProfilePhoto.src = photoURL;
-            applyUserPreferences(userData.preferences);
+            applyUserPreferences(currentUserProfile.preferences);
         }
     });
 };
@@ -219,10 +247,10 @@ const renderListView = () => {
         taskItem.className = `task-item ${isCompleted ? 'completed' : ''}`;
         taskItem.dataset.id = task.id;
         taskItem.dataset.priority = task.priority || 'low';
-        
+
         const deadlineDate = task.deadline ? new Date(task.deadline.seconds * 1000).toLocaleDateString() : '';
         const deadlineTime = task.deadline ? new Date(task.deadline.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-        
+
         let teamTagHTML = '';
         if (task.sharedBy) {
             teamTagHTML = `<div class="team-tag shared-by"><i class="fas fa-user-friends"></i> Shared by ${task.sharedBy.name}</div>`;
@@ -250,6 +278,7 @@ const renderListView = () => {
                 ${teamTagHTML}
             </div>
             <div class="task-actions">
+                <button class="comment-btn"><i class="fas fa-comments"></i></button>
                 <button class="edit-btn"><i class="fas fa-pencil-alt"></i></button>
                 <button class="delete-btn"><i class="fas fa-trash"></i></button>
             </div>
@@ -266,7 +295,7 @@ const renderListView = () => {
 const renderBoardView = () => {
     if (!taskBoardView) return;
     const filteredTasks = getFilteredTasks();
-    
+
     taskBoardView.innerHTML = `
         <div class="task-column"><h3>To-Do</h3><div class="task-cards" data-status="todo"></div></div>
         <div class="task-column"><h3>In Progress</h3><div class="task-cards" data-status="inprogress"></div></div>
@@ -310,7 +339,11 @@ const renderBoardView = () => {
             e.currentTarget.classList.remove('drag-over');
             const taskId = e.dataTransfer.getData('text/plain');
             const newStatus = e.currentTarget.dataset.status;
-            db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ status: newStatus });
+            const task = allTasks.find(t => t.id === taskId);
+            if (task && task.status !== newStatus) {
+                db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ status: newStatus });
+                addUpdateLog(taskId, 'status', { oldValue: task.status, newValue: newStatus });
+            }
         });
     });
 };
@@ -331,7 +364,7 @@ const renderCalendarView = () => {
         </div>
         <div id="calendar-grid-main" class="calendar-grid"></div>
     `;
-    
+
     const grid = document.getElementById('calendar-grid-main'), title = document.getElementById('calendar-title');
 
     if (calendarMode === 'weekly') {
@@ -349,7 +382,7 @@ const renderCalendarView = () => {
             dayCell.className = 'day-cell';
             dayCell.innerHTML = `<div class="day-number">${currentDay.getDate()}</div><div class="calendar-tasks"></div>`;
             grid.appendChild(dayCell);
-            
+
             const tasksForDay = allTasks.filter(task => {
                 if (!task.deadline) return false;
                 return new Date(task.deadline.seconds * 1000).toDateString() === currentDay.toDateString();
@@ -359,7 +392,7 @@ const renderCalendarView = () => {
                 const event = document.createElement('div');
                 event.className = 'calendar-task-event';
                 event.textContent = task.text;
-                event.addEventListener('click', () => openDetailModal(task));
+                event.addEventListener('click', () => openDetailModal(task.id));
                 tasksContainer.appendChild(event);
             });
         }
@@ -370,10 +403,10 @@ const renderCalendarView = () => {
         grid.classList.remove('weekly-view');
         const firstDayOfMonth = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
+
         ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => grid.insertAdjacentHTML('beforeend', `<div class="calendar-day-header">${d}</div>`));
         for (let i = 0; i < firstDayOfMonth; i++) grid.insertAdjacentHTML('beforeend', '<div class="day-cell other-month"></div>');
-        
+
         for (let i = 1; i <= daysInMonth; i++) {
             const dayCell = document.createElement('div');
             dayCell.className = 'day-cell';
@@ -389,14 +422,14 @@ const renderCalendarView = () => {
                 const event = document.createElement('div');
                 event.className = 'calendar-task-event';
                 event.textContent = task.text;
-                event.addEventListener('click', () => openDetailModal(task));
+                event.addEventListener('click', () => openDetailModal(task.id));
                 tasksContainer.appendChild(event);
             });
         }
         document.getElementById('prev-btn').onclick = () => { calendarDate.setMonth(month - 1); renderCalendarView(); };
         document.getElementById('next-btn').onclick = () => { calendarDate.setMonth(month + 1); renderCalendarView(); };
     }
-    
+
     calendarView.querySelector('.calendar-mode-toggle').addEventListener('click', (e) => {
         if (e.target.matches('.toggle-btn')) {
             calendarMode = e.target.dataset.mode;
@@ -432,6 +465,10 @@ const openTaskModal = (task = null) => {
     if (!taskModal) return;
     taskForm.reset();
     subtaskList.innerHTML = '';
+    attachmentsListModal.innerHTML = '';
+    filesToUpload = [];
+    existingAttachments = [];
+    originalAttachmentsBeforeEdit = [];
     if(aiSuggestionBox) aiSuggestionBox.innerHTML = '';
     customCategoryInput.classList.add('hide');
     if (task) {
@@ -442,7 +479,7 @@ const openTaskModal = (task = null) => {
         if(taskStatusSelect) taskStatusSelect.value = task.status || 'todo';
         if (task.deadline) {
             const deadline = new Date(task.deadline.seconds * 1000);
-            datePicker.setDate(deadline, false); 
+            datePicker.setDate(deadline, false);
             timePicker.setDate(deadline, false);
         } else {
             datePicker.clear(); timePicker.clear();
@@ -455,6 +492,12 @@ const openTaskModal = (task = null) => {
             categorySelect.value = task.category || 'Personal';
         }
         if (task.subtasks) task.subtasks.forEach(sub => renderSubtaskInModal(sub, subtaskList, false));
+        if (task.attachments) {
+            existingAttachments = [...task.attachments];
+            originalAttachmentsBeforeEdit = [...task.attachments];
+            renderAttachmentPreviews(attachmentsListModal, existingAttachments, false);
+        }
+
     } else {
         editingTaskId = null;
         taskModalTitle.textContent = 'Add New Task';
@@ -464,25 +507,624 @@ const openTaskModal = (task = null) => {
     taskModal.classList.remove('hide');
 };
 
-const openDetailModal = (task) => {
+const createConversationForTask = async (taskId) => {
+    if (conversationCreationLocks.has(taskId)) {
+        return conversationCreationLocks.get(taskId);
+    }
+
+    const creationPromise = (async () => {
+        if (!currentUser) throw new Error("User not authenticated");
+        
+        const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
+        
+        try {
+            return await db.runTransaction(async (transaction) => {
+                const taskDoc = await transaction.get(taskRef);
+                if (!taskDoc.exists) throw "Task document not found!";
+                
+                const taskData = taskDoc.data();
+                if (taskData.conversationId) {
+                    return taskData.conversationId;
+                }
+
+                const authorized = new Set([currentUser.uid]);
+                if (taskData.sharedBy?.uid) authorized.add(taskData.sharedBy.uid);
+                if (taskData.assignedBy?.uid) authorized.add(taskData.assignedBy.uid);
+                if (taskData.assignedTo?.uid) authorized.add(taskData.assignedTo.uid);
+
+                const convoRef = db.collection('task_conversations').doc();
+                transaction.set(convoRef, {
+                    authorizedUsers: Array.from(authorized),
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                transaction.update(taskRef, { conversationId: convoRef.id });
+
+                return convoRef.id;
+            });
+        } catch (error) {
+            console.error("Conversation creation transaction failed: ", error);
+            throw error; // Rethrow to be caught by the caller
+        }
+    })();
+    
+    conversationCreationLocks.set(taskId, creationPromise);
+    creationPromise.then(conversationId => {
+        const taskIndex = allTasks.findIndex(t => t.id === taskId);
+        if (taskIndex > -1) allTasks[taskIndex].conversationId = conversationId;
+    }).finally(() => {
+        conversationCreationLocks.delete(taskId);
+    });
+
+    return creationPromise;
+};
+
+const openDetailModal = async (taskId) => {
     if (!taskDetailModal) return;
-    detailTaskId = task.id;
+    const task = allTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    cleanupCommentListener();
+    
+    activeListenerToken = taskId;
+    detailTaskId = taskId;
     detailTaskTitle.textContent = task.text;
+
     detailSubtaskList.innerHTML = '';
     if (task.subtasks) task.subtasks.forEach(sub => renderSubtaskInModal(sub, detailSubtaskList, true));
+    renderAttachmentPreviews(detailAttachmentsList, task.attachments || [], true);
+    
+    const commentSection = detailCommentsList?.closest('.detail-section');
+    const updateLogSection = document.getElementById('detail-update-log-section');
+    
+    if (typeof teamModeActive !== 'undefined' && teamModeActive) {
+        if(commentSection) commentSection.style.display = 'block';
+        if(updateLogSection) updateLogSection.style.display = 'block';
+        renderUpdateLog(taskId);
+
+        if (task.conversationId) {
+            detailCommentsList.innerHTML = '<p class="no-comments">Loading comments...</p>';
+            setupCommentListenerWithRetry(task.conversationId);
+        } else {
+            detailCommentsList.innerHTML = '<p class="no-comments">Starting conversation...</p>';
+             createConversationForTask(taskId).then(newConversationId => {
+                if (newConversationId && activeListenerToken === taskId) {
+                    setupCommentListenerWithRetry(newConversationId);
+                }
+            }).catch(error => {
+                console.error("Failed to create or retrieve conversation:", error);
+                if (activeListenerToken === taskId) {
+                    detailCommentsList.innerHTML = `<p class="no-comments error">Could not set up the comment section.</p>`;
+                }
+            });
+        }
+    } else {
+        if(commentSection) commentSection.style.display = 'none';
+        if(updateLogSection) updateLogSection.style.display = 'none';
+    }
+
+    const commentFeedback = document.getElementById('comment-feedback');
+    if (commentFeedback) commentFeedback.textContent = '';
     taskDetailModal.classList.remove('hide');
 };
+
 
 const renderSubtaskInModal = (subtask, listElement, isDetailView = false) => {
     const item = document.createElement('div');
     item.className = `subtask-item ${subtask.completed ? 'completed' : ''}`;
     item.innerHTML = isDetailView ? `
         <input type="checkbox" ${subtask.completed ? 'checked' : ''}>
-        <input type="text" class="detail-subtask-text" value="${subtask.text}" readonly>
+        <span class="subtask-text">${subtask.text}</span>
         <button type="button" class="delete-subtask-btn"><i class="fas fa-times"></i></button>`
         : `<input type="text" value="${subtask.text}"><button type="button" class="delete-subtask-btn"><i class="fas fa-times"></i></button>`;
     listElement.appendChild(item);
 };
+
+// --- Attachment Functions --- //
+
+const validateFile = (file) => {
+    const errors = [];
+    const existingFileNames = [...existingAttachments.map(f => f.name.toLowerCase()), ...filesToUpload.map(f => f.file.name.toLowerCase())];
+    
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        errors.push(`'${file.name}' is too large (max ${MAX_FILE_SIZE_MB}MB).`);
+    }
+
+    const typeAllowed = !!ALLOWED_FILE_TYPES[file.type];
+    if (!typeAllowed) {
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const allowedExts = Object.values(ALLOWED_FILE_TYPES).flat();
+        if (!allowedExts.includes('.' + ext)) {
+            errors.push(`'${file.name}' has an unsupported file type.`);
+        }
+    }
+    
+    if (existingFileNames.includes(file.name.toLowerCase())) {
+        errors.push(`A file named '${file.name}' has already been added.`);
+    }
+    return errors;
+};
+
+const validateFileList = (files) => {
+    const validFiles = [];
+    const errors = [];
+    let currentTotalSize = [...existingAttachments, ...filesToUpload.map(f => f.file)].reduce((acc, f) => acc + (f.size || 0), 0);
+
+    for (const file of files) {
+        const fileErrors = validateFile(file);
+        if (fileErrors.length > 0) {
+            errors.push(...fileErrors);
+            continue;
+        }
+
+        if (currentTotalSize + file.size > MAX_TOTAL_UPLOAD_MB * 1024 * 1024) {
+            errors.push(`Cannot add '${file.name}', as total upload size would exceed ${MAX_TOTAL_UPLOAD_MB}MB.`);
+            continue;
+        }
+        
+        currentTotalSize += file.size;
+        validFiles.push(file);
+    }
+    return { validFiles, errors };
+};
+
+const handleFileUpload = (e) => {
+    const newFiles = Array.from(e.target.files);
+    if (newFiles.length === 0) return;
+
+    const { validFiles, errors } = validateFileList(newFiles);
+
+    if (errors.length > 0) {
+        const feedbackEl = taskModal.querySelector('.feedback') || profileFeedback;
+        showFeedback(feedbackEl, `File validation failed:\n${errors.join('\n')}`, 'error');
+    }
+
+    if (validFiles.length > 0) {
+        const newUploads = validFiles.map(file => ({
+            file,
+            id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            progress: 0,
+            status: 'pending',
+            error: null,
+            bytesTransferred: 0
+        }));
+        filesToUpload.push(...newUploads);
+        renderAttachmentPreviews(attachmentsListModal, [...existingAttachments, ...filesToUpload], false);
+    }
+
+    e.target.value = '';
+};
+
+const getFileIcon = (fileName) => {
+    const extension = fileName.split('.').pop().toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) return 'fa-solid fa-file-image';
+    if (['pdf'].includes(extension)) return 'fa-solid fa-file-pdf';
+    if (['doc', 'docx'].includes(extension)) return 'fa-solid fa-file-word';
+    if (['xls', 'xlsx'].includes(extension)) return 'fa-solid fa-file-excel';
+    return 'fa-solid fa-file';
+};
+
+const updateUploadProgress = (fileId, progress, status, errorMessage = null) => {
+    const fileWrapper = filesToUpload.find(f => f.id === fileId);
+    if(fileWrapper) {
+        fileWrapper.progress = progress;
+        fileWrapper.status = status;
+        fileWrapper.error = errorMessage;
+    }
+
+    const previewItem = attachmentsListModal.querySelector(`[data-file-id="${fileId}"]`);
+    if (!previewItem) return;
+
+    const progressBar = previewItem.querySelector('.progress-bar');
+    const statusIcon = previewItem.querySelector('.status-icon');
+    const errorDisplay = previewItem.querySelector('.attachment-error');
+
+    if (progressBar) progressBar.style.width = `${progress}%`;
+    if (errorDisplay) {
+        errorDisplay.textContent = errorMessage || '';
+        errorDisplay.style.display = errorMessage ? 'block' : 'none';
+    }
+
+    if (statusIcon) {
+        statusIcon.className = 'status-icon fas';
+        switch (status) {
+            case 'uploading': statusIcon.classList.add('fa-spinner', 'fa-spin'); break;
+            case 'success': statusIcon.classList.add('fa-check-circle'); break;
+            case 'error': statusIcon.classList.add('fa-exclamation-circle'); break;
+            default: statusIcon.className = 'status-icon'; break;
+        }
+    }
+};
+
+const renderAttachmentPreviews = (container, files, isDetailView) => {
+    container.innerHTML = '';
+    if (!files || files.length === 0) {
+        if (isDetailView) container.innerHTML = '<p class="no-comments">No attachments.</p>';
+        return;
+    }
+    
+    files.forEach((fileOrWrapper) => {
+        const isWrapper = !!fileOrWrapper.file;
+        const fileName = isWrapper ? fileOrWrapper.file.name : fileOrWrapper.name;
+        const fileURL = isWrapper ? '#' : fileOrWrapper.url;
+        const fileId = isWrapper ? fileOrWrapper.id : null;
+        const iconClass = getFileIcon(fileName);
+
+        const item = document.createElement('div');
+        if (isDetailView) {
+            item.className = 'attachment-item';
+            item.innerHTML = `
+                <i class="attachment-icon ${iconClass}"></i>
+                <div class="attachment-info"><span>${fileName}</span></div>
+                <div class="attachment-actions">
+                    <a href="${fileURL}" target="_blank" rel="noopener noreferrer" class="view-attachment-btn">
+                        <i class="fas fa-external-link-alt"></i> View
+                    </a>
+                </div>`;
+        } else {
+            item.className = 'attachment-item-preview';
+            if (fileId) item.dataset.fileId = fileId;
+            item.innerHTML = `
+                <i class="${iconClass}"></i>
+                <span>${fileName}</span>
+                <div class="attachment-progress"><div class="progress-bar"></div></div>
+                <i class="status-icon"></i>
+                <p class="attachment-error"></p>
+                <button type="button" class="delete-attachment-btn" data-name="${fileName}" ${isWrapper ? `data-id="${fileId}"` : ''}>&times;</button>`;
+        }
+        container.appendChild(item);
+    });
+};
+
+const getFriendlyStorageErrorMessage = (error) => {
+    switch (error.code) {
+        case 'storage/unauthorized': return "Permission denied. You can't upload here.";
+        case 'storage/canceled': return "Upload was canceled.";
+        case 'storage/quota-exceeded': return "Storage limit reached. Cannot upload more files.";
+        case 'storage/retry-limit-exceeded': return "Network error. Please try again.";
+        default: return "An unknown error occurred during upload.";
+    }
+};
+
+const uploadFiles = async (taskId, onProgress, onOverallProgress) => {
+    if (!currentUser) {
+        console.error("Authentication Error: Cannot upload files, user is not signed in.");
+        return [];
+    }
+    const filesToProcess = filesToUpload.filter(f => f.status === 'pending' || f.status === 'error');
+    if (filesToProcess.length === 0) return [];
+    
+    const computeOverallProgress = () => {
+        const activeFiles = filesToUpload.filter(f => f.status === 'uploading' || f.status === 'success');
+        const totalBytes = activeFiles.reduce((acc, f) => acc + f.file.size, 0) || 1;
+        const transferred = activeFiles.reduce((acc, f) => acc + (f.bytesTransferred || 0), 0);
+        onOverallProgress(transferred, totalBytes);
+    };
+
+    const uploadPromises = filesToProcess.map(fileWrapper => {
+        const { file, id } = fileWrapper;
+        fileWrapper.status = 'uploading';
+        
+        return new Promise(async (resolve, reject) => {
+            let attempt = 0;
+            const maxRetries = 3;
+            
+            while(attempt < maxRetries) {
+                fileWrapper.bytesTransferred = 0;
+                computeOverallProgress();
+
+                try {
+                    const uniqueFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name.replace(/\s+/g, '_')}`;
+                    const filePath = `task_attachments/${currentUser.uid}/${taskId}/${uniqueFileName}`;
+                     console.log("Uploading to path:", filePath); // Path debugging
+                    const fileRef = storage.ref(filePath);
+                    
+                    const result = await new Promise((resolveUpload, rejectUpload) => {
+                        const uploadTask = fileRef.put(file);
+                        uploadTask.on('state_changed', 
+                            (snapshot) => {
+                                fileWrapper.bytesTransferred = snapshot.bytesTransferred;
+                                computeOverallProgress();
+                                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                                onProgress(id, progress, 'uploading');
+                            }, 
+                            rejectUpload, 
+                            async () => {
+                                const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                                fileWrapper.status = 'success';
+                                onProgress(id, 100, 'success');
+                                computeOverallProgress();
+                                resolveUpload({ name: file.name, url: downloadURL });
+                            }
+                        );
+                    });
+                    resolve(result);
+                    return;
+                } catch (error) {
+                    console.error(`Upload error for ${file.name} on attempt ${attempt + 1}:`, {
+                        path: `task_attachments/${currentUser.uid}/${taskId}/...`,
+                        uid: currentUser.uid,
+                        error: error
+                    });
+                    const isTransient = ['storage/unknown', 'storage/retry-limit-exceeded'].includes(error.code);
+                    if (isTransient && attempt < maxRetries - 1) {
+                        await new Promise(res => setTimeout(res, 1000 * Math.pow(2, attempt)));
+                        attempt++;
+                    } else {
+                        const message = getFriendlyStorageErrorMessage(error);
+                        fileWrapper.status = 'error';
+                        onProgress(id, 0, 'error', message);
+                        computeOverallProgress();
+                        reject({ name: file.name, error });
+                        return;
+                    }
+                }
+            }
+        });
+    });
+
+    const results = await Promise.allSettled(uploadPromises);
+    const successfulUploads = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+    
+    if (results.some(r => r.status === 'rejected')) {
+         console.error("Some files failed to upload after retries.", results.filter(r => r.status === 'rejected'));
+    }
+
+    return successfulUploads;
+};
+
+
+// --- Comment Functions --- //
+const cleanupCommentListener = () => {
+    if (unsubscribeComments) unsubscribeComments();
+    if (unsubscribeUpdateLog) unsubscribeUpdateLog();
+    unsubscribeComments = null;
+    unsubscribeUpdateLog = null;
+    activeListenerToken = null;
+};
+
+const setupCommentListenerWithRetry = (conversationId, retries = 3, delay = 1000) => {
+    if (unsubscribeComments) unsubscribeComments(); 
+    if (activeListenerToken !== detailTaskId) return; 
+
+    const commentsRef = db.collection('task_conversations').doc(conversationId).collection('comments').orderBy('createdAt', 'asc');
+
+    unsubscribeComments = commentsRef.onSnapshot(async (snapshot) => {
+        if (activeListenerToken !== detailTaskId) return;
+
+        if (snapshot.empty) {
+            detailCommentsList.innerHTML = '<p class="no-comments">No comments yet. Be the first to comment!</p>';
+            return;
+        }
+
+        detailCommentsList.innerHTML = '';
+
+        const authorIds = [...new Set(snapshot.docs.map(doc => doc.data().authorId))];
+        
+        const profilePromises = authorIds.map(async (id) => {
+            try {
+                const doc = await db.collection('users').doc(id).get();
+                return [id, doc.exists() ? doc.data() : { displayName: 'Unknown User', email: 'unknown' }];
+            } catch (e) {
+                console.error(`Failed to fetch profile for user ${id}:`, e);
+                return [id, { displayName: 'Unknown User', email: 'unknown' }];
+            }
+        });
+        const results = await Promise.all(profilePromises);
+        const authorProfiles = Object.fromEntries(results);
+
+        snapshot.docs.forEach(doc => {
+            const comment = doc.data();
+            const author = authorProfiles[comment.authorId];
+            renderComment(comment, author);
+        });
+        detailCommentsList.scrollTop = detailCommentsList.scrollHeight;
+
+    }, (error) => {
+        console.error("Error listening for comments:", error.code, error.message);
+        
+        if (unsubscribeComments) unsubscribeComments();
+
+        if (error.code === 'failed-precondition') {
+            detailCommentsList.innerHTML = `<p class="no-comments error"><strong>Error:</strong> Comments can't be loaded because a required database configuration is missing. If you are the developer, please deploy the Firestore indexes.</p>`;
+        } else if (error.code === 'permission-denied') {
+            detailCommentsList.innerHTML = `<p class="no-comments error"><strong>Error:</strong> You do not have permission to view these comments.</p>`;
+        } else {
+             if (retries > 0) {
+                setTimeout(() => {
+                    if (activeListenerToken === detailTaskId && detailTaskId) {
+                        setupCommentListenerWithRetry(conversationId, retries - 1, delay * 2);
+                    }
+                }, delay);
+            } else {
+                if (activeListenerToken === detailTaskId) {
+                    detailCommentsList.innerHTML = `<p class="no-comments error"><strong>Error:</strong> We couldn't load comments after several attempts. Please check your internet connection and try opening the task again.</p>`;
+                }
+            }
+        }
+    });
+};
+
+
+const renderComment = (comment, author) => {
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    const timestamp = comment.createdAt ? new Date(comment.createdAt.seconds * 1000).toLocaleString() : 'Just now';
+
+    item.innerHTML = `
+        <div class="comment-content">
+            <div class="comment-header">
+                <span class="comment-author-name">${author.displayName || 'Unknown User'}</span>
+                <span class="comment-author-email">&lt;${author.email || 'No email'}&gt;</span>
+                <span class="comment-timestamp">${timestamp}</span>
+            </div>
+            <p class="comment-text">${comment.text}</p>
+        </div>
+    `;
+    detailCommentsList.appendChild(item);
+};
+
+const addCommentWithRetry = async (ref, data, maxRetries = 3) => {
+    let attempt = 0;
+    while (attempt < maxRetries) {
+        try {
+            return await ref.add(data);
+        } catch (err) {
+            const isTransient = ['unavailable', 'deadline-exceeded', 'aborted'].includes(err.code) || !err.code;
+            if (isTransient && attempt < maxRetries - 1) {
+                const delay = 500 * Math.pow(2, attempt);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                attempt++;
+            } else {
+                throw err;
+            }
+        }
+    }
+};
+
+const handlePostComment = async (e) => {
+    e.preventDefault();
+    if (!currentUser) {
+        const commentFeedback = document.getElementById('comment-feedback');
+        if (commentFeedback) showFeedback(commentFeedback, 'Please sign in to post a comment.', 'error');
+        return;
+    }
+
+    const now = Date.now();
+    if (now - lastCommentTime < 800) return;
+    
+    const text = detailCommentInput.value.trim();
+    if (!text || !detailTaskId || isPostingComment) return;
+    
+    lastCommentTime = now;
+    isPostingComment = true;
+    const submitBtn = detailCommentForm.querySelector('.comment-submit-btn');
+    const commentFeedback = document.getElementById('comment-feedback');
+    const originalBtnIcon = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    if(commentFeedback) commentFeedback.textContent = '';
+
+    try {
+        const task = allTasks.find(t => t.id === detailTaskId);
+        if (!task) throw new Error("Task not found");
+
+        let conversationId = task.conversationId || await createConversationForTask(detailTaskId);
+        if (!conversationId) throw new Error("Failed to create or retrieve conversation.");
+
+        const commentData = {
+            text,
+            authorId: currentUser.uid,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        const commentsRef = db.collection('task_conversations').doc(conversationId).collection('comments');
+        await addCommentWithRetry(commentsRef, commentData);
+        await addUpdateLog(detailTaskId, 'commented', { text });
+
+        detailCommentInput.value = '';
+
+    } catch (err) {
+        console.error("Error posting comment: ", err);
+        const errorMessage = err.code === 'permission-denied'
+            ? 'You do not have permission to post comments here.'
+            : 'Failed to post comment. Please check your network and try again.';
+        if(commentFeedback) showFeedback(commentFeedback, errorMessage, 'error');
+    } finally {
+        isPostingComment = false;
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnIcon;
+    }
+};
+
+// --- Team Mode Update Log Functions --- //
+
+async function addUpdateLogForUser(targetUid, taskId, action, details = {}) {
+     if (!currentUser || !(typeof teamModeActive !== 'undefined' && teamModeActive)) return;
+    try {
+        const logData = {
+            action,
+            ...details,
+            updatedBy: {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                displayName: currentUserProfile.displayName || currentUser.email.split('@')[0]
+            },
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await db.collection('users').doc(targetUid).collection('tasks').doc(taskId).collection('updates').add(logData);
+    } catch (error) {
+        console.error("Failed to add update log for other user:", error);
+    }
+}
+
+async function addUpdateLog(taskId, action, details = {}) {
+    await addUpdateLogForUser(currentUser.uid, taskId, action, details);
+}
+
+
+function renderUpdateLog(taskId) {
+    const logList = document.getElementById('detail-update-log-list');
+    if (!logList) return;
+    logList.innerHTML = '<p class="no-updates">Loading history...</p>';
+    if (unsubscribeUpdateLog) unsubscribeUpdateLog();
+
+    const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).collection('updates');
+    unsubscribeUpdateLog = ref.orderBy('updatedAt', 'desc').limit(20)
+        .onSnapshot(snapshot => {
+            if (snapshot.empty) {
+                logList.innerHTML = '<p class="no-updates">No update history for this task.</p>';
+                return;
+            }
+            logList.innerHTML = '';
+            snapshot.docs.forEach(doc => {
+                const log = doc.data();
+                const item = document.createElement('div');
+                item.className = 'update-log-item';
+                const timestamp = log.updatedAt ? new Date(log.updatedAt.seconds * 1000).toLocaleString() : '';
+                
+                let content = '';
+                switch(log.action) {
+                    case 'status':
+                        content = `changed status from <strong>${log.oldValue || 'N/A'}</strong> to <strong>${log.newValue || 'N/A'}</strong>`;
+                        break;
+                    case 'edit':
+                        content = `updated the field <strong>${log.field}</strong>`;
+                        break;
+                    case 'subtask':
+                         content = `updated subtasks`;
+                        break;
+                    case 'commented':
+                        content = `added a comment: "${log.text.substring(0, 30)}..."`;
+                        break;
+                    case 'assigned_completed':
+                        content = `marked an assigned task as complete`;
+                        break;
+                    default:
+                        content = `made an update`;
+                }
+
+                item.innerHTML = `
+                    <div class="update-log-header">
+                        <span class="update-log-author">${log.updatedBy.displayName}</span>
+                        <span class="update-log-timestamp">${timestamp}</span>
+                    </div>
+                    <p class="update-log-content">${content}</p>
+                `;
+                logList.appendChild(item);
+            });
+        }, (error) => {
+            if (unsubscribeUpdateLog) unsubscribeUpdateLog();
+            if (!logList) return;
+            console.error("Error fetching update log:", error);
+            if (error.code === 'permission-denied') {
+                logList.innerHTML = '<p class="no-updates error"><strong>Error:</strong> You do not have permission to view update history.</p>';
+            } else {
+                logList.innerHTML = '<p class="no-updates error"><strong>Error:</strong> Could not load update history. Please try again.</p>';
+            }
+        });
+}
+
 
 // --- Smart Feature Functions --- //
 const setupNotifications = () => {
@@ -494,7 +1136,7 @@ const setupNotifications = () => {
     Notification.requestPermission().then((permission) => {
         if (permission === 'granted') {
             showFeedback(profileFeedback, 'Notifications enabled!', 'success');
-            const vapidKey = 'YOUR_VAPID_KEY_FROM_FIREBASE_CONSOLE'; 
+            const vapidKey = 'YOUR_VAPID_KEY_FROM_FIREBASE_CONSOLE';
             messaging.getToken({ vapidKey: vapidKey })
                 .then((currentToken) => {
                     if (currentToken) {
@@ -548,7 +1190,7 @@ function shadeColor(color, percent) {
 document.addEventListener('DOMContentLoaded', () => {
     datePicker = flatpickr(deadlineDateInput, { dateFormat: "Y-m-d", altInput: true, altFormat: "M j, Y" });
     timePicker = flatpickr(deadlineTimeInput, { enableTime: true, noCalendar: true, dateFormat: "H:i", altInput: true, altFormat: "h:i K" });
-    
+
     if (accentColorPicker) {
         accentColors.forEach(color => {
             const swatch = document.createElement('div');
@@ -589,9 +1231,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-    
+
     // --- ALL EVENT LISTENERS --- //
     auth.onAuthStateChanged(updateUIforLoginState);
+    window.addEventListener('beforeunload', cleanupCommentListener);
     backBtn?.addEventListener('click', () => showPage('todo-page'));
     logo?.addEventListener('click', () => { if (currentUser) showPage('todo-page'); });
     signinLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
@@ -611,6 +1254,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(cred => db.collection('users').doc(cred.user.uid).set({
                 displayName: userEmail.split('@')[0],
                 email: userEmail.toLowerCase(),
+                photoURL: 'https://placehold.co/100x100/d4a373/fefae0?text=User',
                 preferences: userPreferences
             }))
             .catch(error => showFeedback(signupFeedback, error.message, 'error'));
@@ -639,11 +1283,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     themeToggle?.addEventListener('change', (e) => { userPreferences.theme = e.target.checked ? 'dark' : 'light'; applyUserPreferences(userPreferences); });
     accentColorPicker?.addEventListener('click', (e) => { if (e.target.matches('.color-swatch')) { userPreferences.accentColor = e.target.dataset.color; applyUserPreferences(userPreferences); } });
-    layoutSwitcher?.addEventListener('change', (e) => { 
+    layoutSwitcher?.addEventListener('change', (e) => {
         if (e.target.matches('input[name="layout"]')) {
-            userPreferences.layout = e.target.value; 
-            applyUserPreferences(userPreferences); 
-            renderCurrentView(); 
+            userPreferences.layout = e.target.value;
+            applyUserPreferences(userPreferences);
+            renderCurrentView();
         }
         if (e.target.matches('input[name="calendar-default"]')) {
             userPreferences.calendarDefault = e.target.value;
@@ -653,10 +1297,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
     addTaskBtn?.addEventListener('click', () => openTaskModal());
     cancelTaskBtn?.addEventListener('click', () => taskModal.classList.add('hide'));
-    detailCloseBtn?.addEventListener('click', () => taskDetailModal.classList.add('hide'));
-    
-    saveTaskBtn?.addEventListener('click', () => {
+    detailCloseBtn?.addEventListener('click', () => {
+        taskDetailModal.classList.add('hide');
+        cleanupCommentListener();
+        detailTaskId = null;
+    });
+
+    saveTaskBtn?.addEventListener('click', async () => {
         if (!currentUser || !taskInput.value.trim()) return;
+        saveTaskBtn.disabled = true;
+
+        const modalActions = taskModal.querySelector('.modal-actions');
+        let progressContainer = document.getElementById('overall-progress-container');
+        if (!progressContainer) {
+            progressContainer = document.createElement('div');
+            progressContainer.id = 'overall-progress-container';
+            progressContainer.className = 'overall-progress-container';
+            progressContainer.innerHTML = `
+                <span>Overall Progress:</span>
+                <div class="overall-progress-bar-background">
+                    <div id="overall-progress-bar" class="overall-progress-bar" style="width: 0%;"></div>
+                </div>`;
+            modalActions.prepend(progressContainer);
+        }
+        progressContainer.style.display = 'none';
+
+        const updateOverallProgress = (transferred, total) => {
+            if (total > 0) {
+                const percentage = (transferred / total) * 100;
+                const progressBar = document.getElementById('overall-progress-bar');
+                if (progressBar) progressBar.style.width = `${percentage}%`;
+                if(progressContainer) progressContainer.style.display = 'block';
+            }
+        };
 
         let category = categorySelect.value === 'custom' ? customCategoryInput.value.trim() || 'Uncategorized' : categorySelect.value;
         const deadlineDateVal = datePicker.selectedDates[0];
@@ -672,18 +1345,53 @@ document.addEventListener('DOMContentLoaded', () => {
             .map(input => ({ text: input.value.trim(), completed: false }))
             .filter(sub => sub.text);
         const status = taskStatusSelect ? taskStatusSelect.value : 'todo';
-        const taskData = { text: taskInput.value.trim(), priority: prioritySelect.value, status: status, deadline: deadline ? firebase.firestore.Timestamp.fromDate(deadline) : null, category, subtasks };
+        let taskData = { text: taskInput.value.trim(), priority: prioritySelect.value, status: status, deadline: deadline ? firebase.firestore.Timestamp.fromDate(deadline) : null, category, subtasks };
         const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks');
+        let newAttachments = [];
         
-        if (editingTaskId) {
-            taskRef.doc(editingTaskId).update(taskData);
-        } else {
-            taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-            taskRef.add(taskData);
+        const originalTask = editingTaskId ? allTasks.find(t => t.id === editingTaskId) : null;
+
+        try {
+            if (editingTaskId) {
+                newAttachments = await uploadFiles(editingTaskId, updateUploadProgress, updateOverallProgress);
+                taskData.attachments = [...existingAttachments, ...newAttachments];
+                await taskRef.doc(editingTaskId).update(taskData);
+                
+                Object.keys(taskData).forEach(key => {
+                    if (originalTask && JSON.stringify(taskData[key]) !== JSON.stringify(originalTask[key])) {
+                         if (key === 'deadline') {
+                           addUpdateLog(editingTaskId, 'edit', { field: key, oldValue: originalTask[key] ? new Date(originalTask[key].seconds * 1000).toLocaleDateString() : 'None', newValue: taskData[key] ? new Date(taskData[key].seconds * 1000).toLocaleDateString() : 'None' });
+                        } else if (key !== 'attachments' && key !== 'subtasks') {
+                           addUpdateLog(editingTaskId, 'edit', { field: key, oldValue: originalTask[key], newValue: taskData[key] });
+                        }
+                    }
+                });
+
+            } else {
+                const tempTaskId = taskRef.doc().id;
+                newAttachments = await uploadFiles(tempTaskId, updateUploadProgress, updateOverallProgress);
+                taskData.attachments = newAttachments;
+                taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                await taskRef.doc(tempTaskId).set(taskData);
+            }
+            taskModal.classList.add('hide');
+        } catch (error) {
+            console.error("Error saving task:", error);
+            showFeedback(profileFeedback, "Error saving task. Some files may not have uploaded.", "error");
+
+            if (!editingTaskId && newAttachments.length > 0) {
+                await Promise.all(newAttachments.map(async (attachment) => {
+                    try { await storage.refFromURL(attachment.url).delete(); } 
+                    catch (e) { console.warn(`Failed to clean up orphaned file: ${attachment.url}`, e); }
+                }));
+            }
+        } finally {
+            saveTaskBtn.disabled = false;
+            if(progressContainer) progressContainer.style.display = 'none';
         }
-        taskModal.classList.add('hide');
     });
-    
+
+
     categorySelect?.addEventListener('change', () => customCategoryInput.classList.toggle('hide', categorySelect.value !== 'custom'));
 
     subtaskAddBtn?.addEventListener('click', () => {
@@ -702,54 +1410,62 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     detailSubtaskList?.addEventListener('click', (e) => {
-        if (e.target.closest('.delete-subtask-btn')) e.target.closest('.subtask-item').remove();
-        if (e.target.matches('input[type="checkbox"]')) e.target.closest('.subtask-item').classList.toggle('completed');
-        saveSubtasksFromDetail();
+        if (e.target.closest('.delete-subtask-btn')) {
+            e.target.closest('.subtask-item').remove();
+            saveSubtasksFromDetail();
+        }
+        if (e.target.matches('input[type="checkbox"]')) {
+            e.target.closest('.subtask-item').classList.toggle('completed');
+            saveSubtasksFromDetail();
+        }
     });
+
     const saveSubtasksFromDetail = () => {
         if (!currentUser || !detailTaskId) return;
-        const subtasks = Array.from(detailSubtaskList.querySelectorAll('.subtask-item')).map(item => ({ text: item.querySelector('input[type="text"]').value.trim(), completed: item.querySelector('input[type="checkbox"]').checked }));
+        const subtasks = Array.from(detailSubtaskList.querySelectorAll('.subtask-item')).map(item => ({ text: item.querySelector('.subtask-text').textContent.trim(), completed: item.querySelector('input[type="checkbox"]').checked }));
         db.collection('users').doc(currentUser.uid).collection('tasks').doc(detailTaskId).update({ subtasks });
+        addUpdateLog(detailTaskId, 'subtask', {});
     };
 
     taskListView?.addEventListener('click', (e) => {
         const taskItem = e.target.closest('.task-item');
-        if (!taskItem || !currentUser) return;
+        if (!taskItem) return;
         const taskId = taskItem.dataset.id;
         const task = allTasks.find(t => t.id === taskId);
         const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
-        
+
         if (e.target.matches('.task-checkbox')) {
             const isChecked = e.target.checked;
-            
-            // For assigned tasks, don't let the assigner change the status directly.
             if (task.assignedTo && task.assignedTo.status === 'pending') {
-                e.preventDefault(); // Prevent checkbox from changing visually
+                e.preventDefault();
                 return;
             }
-
-            taskRef.update({ status: isChecked ? 'completed' : 'todo' });
-
+            const newStatus = isChecked ? 'completed' : 'todo';
+            taskRef.update({ status: newStatus });
+            addUpdateLog(taskId, 'status', { oldValue: task.status, newValue: newStatus });
             if (isChecked && task.assignedBy && task.originalTaskId && task.originalAssignerUid) {
                 const originalTaskRef = db.collection('users').doc(task.originalAssignerUid).collection('tasks').doc(task.originalTaskId);
                 originalTaskRef.update({
                     'assignedTo.status': 'completed',
                     'assignedTo.completedAt': firebase.firestore.FieldValue.serverTimestamp()
                 }).catch(err => console.error("Error updating original assigned task:", err));
+                 addUpdateLogForUser(task.originalAssignerUid, task.originalTaskId, 'assigned_completed', {});
             }
-
         } else if (e.target.closest('.delete-btn')) {
             taskRef.delete();
         } else if (e.target.closest('.edit-btn')) {
             openTaskModal(task);
-        } else if (!e.target.matches('.share-checkbox')) {
-            openDetailModal(task);
+        } else if (e.target.closest('.comment-btn') || e.target.closest('.task-content')) {
+             openDetailModal(taskId);
         }
     });
 
     taskBoardView?.addEventListener('click', (e) => {
         const taskCard = e.target.closest('.task-card-board');
-        if (taskCard) openDetailModal(allTasks.find(t => t.id === taskCard.dataset.id));
+        if (taskCard) {
+            const taskId = taskCard.dataset.id;
+            openDetailModal(taskId);
+        }
     });
 
     searchInput?.addEventListener('input', () => { currentSearchTerm = searchInput.value.toLowerCase().trim(); renderCurrentView(); });
@@ -760,6 +1476,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if(enableNotificationsBtn) enableNotificationsBtn.addEventListener('click', setupNotifications);
     if(voiceAddTaskBtn) voiceAddTaskBtn.addEventListener('click', handleVoiceInput);
 
+    taskAttachmentsInput?.addEventListener('change', handleFileUpload);
+    attachmentsListModal?.addEventListener('click', (e) => {
+        const deleteBtn = e.target.closest('.delete-attachment-btn');
+        if (deleteBtn) {
+            const { name, id } = deleteBtn.dataset;
+
+            if (id) { 
+                filesToUpload = filesToUpload.filter(f => f.id !== id);
+            } else {
+                existingAttachments = existingAttachments.filter(f => f.name !== name);
+            }
+            
+            deleteBtn.closest('.attachment-item-preview').remove();
+        }
+    });
+
+    detailCommentForm?.addEventListener('submit', handlePostComment);
+
     modeToggle?.addEventListener('change', (e) => {
         const isTeamMode = e.target.checked;
         if (isTeamMode) {
@@ -768,7 +1502,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             if (typeof tearDownTeamMode === 'function') tearDownTeamMode();
             else console.error("teammode.js functions not loaded.");
-            listenForTasks(); 
+            listenForTasks();
         }
     });
 });

@@ -1,7 +1,7 @@
 // --- DOM Elements --- //
 const teamControlsContainer = document.querySelector('.team-controls-container');
 const shareTasksBtn = document.getElementById('share-tasks-btn');
-const assignTasksBtn = document.getElementById('assign-tasks-btn'); // New Assign button
+const assignTasksBtn = document.getElementById('assign-tasks-btn');
 const shareTaskModal = document.getElementById('share-task-modal');
 const shareModalTitle = document.getElementById('share-modal-title');
 const shareTaskForm = document.getElementById('share-task-form');
@@ -61,7 +61,6 @@ function handleStartTeamMode() {
         sendTasksBtn = document.createElement('button');
         sendTasksBtn.id = 'send-tasks-btn';
         sendTasksBtn.className = 'hide';
-        // Prepend it inside the team controls container for better layout control
         teamControlsContainer.prepend(sendTasksBtn);
         sendTasksBtn.addEventListener('click', openSendModal);
     }
@@ -79,26 +78,17 @@ function listenForTeamTasks() {
 }
 
 function toggleSelectionMode(action) {
-    // If the same button is clicked again, treat it as a cancel action.
     const isCancelling = currentTeamAction === action;
-    
-    // Clear any previous active state
     shareTasksBtn.classList.remove('active');
     assignTasksBtn.classList.remove('active');
-    
     currentTeamAction = isCancelling ? null : action;
-    
-    // Set the new active state if not cancelling
     if (currentTeamAction) {
         document.getElementById(`${currentTeamAction}-tasks-btn`).classList.add('active');
     }
-    
     toggleSelectionCheckboxesVisibility(!isCancelling, currentTeamAction);
-
     tasksToProcess.clear();
     updateSendButtonVisibility();
 }
-
 
 function toggleSelectionCheckboxesVisibility(show, action) {
     taskListViewForTeam.querySelectorAll('.task-item').forEach(item => {
@@ -137,7 +127,6 @@ function updateSendButtonVisibility() {
     }
 }
 
-
 function showShareFeedback(message, type) {
     if (shareModalFeedback) {
         shareModalFeedback.textContent = message;
@@ -162,20 +151,16 @@ function closeSendModal() {
 async function handleSendFormSubmit(e) {
     e.preventDefault();
     if (shareModalFeedback) shareModalFeedback.textContent = '';
-
     const recipientEmail = shareEmailInput.value.trim().toLowerCase();
     const sharer = auth.currentUser;
-
     if (!recipientEmail || !sharer || recipientEmail === sharer.email) {
         showShareFeedback("Invalid email or you cannot send tasks to yourself.", "error");
         return;
     }
-
     const submitBtn = shareTaskForm.querySelector('button[type="submit"]');
     const originalBtnText = submitBtn.innerHTML;
     submitBtn.disabled = true;
     submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending...`;
-
     try {
         const usersRef = db.collection('users');
         const querySnapshot = await usersRef.where('email', '==', recipientEmail).get();
@@ -185,26 +170,21 @@ async function handleSendFormSubmit(e) {
             submitBtn.innerHTML = originalBtnText;
             return;
         }
-
         const recipient = querySnapshot.docs[0];
         const recipientUid = recipient.id;
         const recipientData = recipient.data();
-        
         if (currentTeamAction === 'share') {
             await executeShare(recipientUid);
         } else if (currentTeamAction === 'assign') {
             await executeAssign(recipientUid, recipientData.displayName || recipientEmail.split('@')[0]);
         }
-        
         showShareFeedback(`Successfully sent ${tasksToProcess.size} task(s)!`, 'success');
-        
         setTimeout(() => {
             closeSendModal();
             toggleSelectionMode(null);
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalBtnText;
         }, 1500);
-
     } catch (error) {
         console.error(`Error processing '${currentTeamAction}' action:`, error);
         showShareFeedback('An error occurred. Please try again.', 'error');
@@ -214,20 +194,24 @@ async function handleSendFormSubmit(e) {
 }
 
 async function executeShare(recipientUid) {
-    const sharerDisplayName = currentUser.displayName || currentUser.email.split('@')[0];
+    const sharerDisplayName = currentUserProfile.displayName || currentUser.email.split('@')[0];
     const batch = db.batch();
     const recipientTasksRef = db.collection('users').doc(recipientUid).collection('tasks');
-    tasksToProcess.forEach(taskId => {
+    for (const taskId of tasksToProcess) {
         const originalTask = allTasks.find(t => t.id === taskId);
-        if (originalTask) {
+        if (originalTask && originalTask.conversationId) {
             const { id, ...taskData } = originalTask;
             const newDocRef = recipientTasksRef.doc();
             batch.set(newDocRef, {
                 ...taskData, status: 'todo', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 sharedBy: { name: sharerDisplayName, uid: currentUser.uid }
             });
+            const convoRef = db.collection('task_conversations').doc(originalTask.conversationId);
+            batch.update(convoRef, {
+                authorizedUsers: firebase.firestore.FieldValue.arrayUnion(recipientUid)
+            });
         }
-    });
+    }
     await batch.commit();
 }
 
@@ -235,15 +219,12 @@ async function executeAssign(recipientUid, recipientName) {
     const batch = db.batch();
     const senderTasksRef = db.collection('users').doc(currentUser.uid).collection('tasks');
     const recipientTasksRef = db.collection('users').doc(recipientUid).collection('tasks');
-    const senderName = currentUser.displayName || currentUser.email.split('@')[0];
-
+    const senderName = currentUserProfile.displayName || currentUser.email.split('@')[0];
     for (const taskId of tasksToProcess) {
         const originalTask = allTasks.find(t => t.id === taskId);
-        if (originalTask) {
+        if (originalTask && originalTask.conversationId) {
             const { id, ...taskData } = originalTask;
             const newRecipientTaskRef = recipientTasksRef.doc();
-            
-            // 1. Create a new task for the recipient
             batch.set(newRecipientTaskRef, {
                 ...taskData, status: 'todo', category: 'Assigned',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -251,14 +232,15 @@ async function executeAssign(recipientUid, recipientName) {
                 originalTaskId: taskId,
                 originalAssignerUid: currentUser.uid,
             });
-
-            // 2. Update the original task on the sender's list
             const originalTaskRef = senderTasksRef.doc(taskId);
             batch.update(originalTaskRef, {
                 assignedTo: { name: recipientName, uid: recipientUid, status: 'pending' }
+            });
+            const convoRef = db.collection('task_conversations').doc(originalTask.conversationId);
+            batch.update(convoRef, {
+                authorizedUsers: firebase.firestore.FieldValue.arrayUnion(recipientUid)
             });
         }
     }
     await batch.commit();
 }
-

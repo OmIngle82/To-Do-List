@@ -3,34 +3,62 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rules for the 'users' collection
+    // --- USER & TASK RULES ---
     match /users/{userId} {
-      // Allow standard profile creation, read, update, and listing users for searching.
-      allow create: if request.auth.uid != null;
-      allow read, update: if request.auth.uid == userId;
-      allow list: if request.auth.uid != null;
+      allow get: if request.auth.uid != null;
+      allow update: if request.auth.uid == userId;
+      allow list, create: if false;
 
-      // Rules for the 'tasks' subcollection
       match /tasks/{taskId} {
-        // The owner of the task list has full read and write access to their own tasks.
         allow read, write: if request.auth.uid == userId;
 
-        // --- NEW RULES FOR SHARING & ASSIGNING ---
-
-        // 1. Allow another authenticated user to CREATE (share/assign) a task in this list,
-        //    provided they properly attribute it with a 'sharedBy' or 'assignedBy' field.
         allow create: if request.auth.uid != null &&
                       request.auth.uid != userId &&
                       (request.resource.data.sharedBy.uid == request.auth.uid ||
                        request.resource.data.assignedBy.uid == request.auth.uid);
 
-        // 2. Allow an assignee to UPDATE the original task on the assigner's list,
-        //    but ONLY to mark it as completed. This is the feedback loop.
         allow update: if request.auth.uid != null &&
-                       request.auth.uid != userId && // Not the owner
-                       request.auth.uid == resource.data.assignedTo.uid && // Is the assignee
+                       request.auth.uid != userId &&
+                       request.auth.uid == resource.data.assignedTo.uid &&
                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignedTo.status', 'assignedTo.completedAt']) &&
                        request.resource.data.assignedTo.status == 'completed';
+        
+        // --- RULES FOR UPDATE LOGS ---
+        match /updates/{updateId} {
+            // Helper function to check if the user is the owner or an authorized collaborator
+            function isAuthorizedOnTask() {
+              let task = get(/databases/$(database)/documents/users/$(userId)/tasks/$(taskId)).data;
+              // A task might not have a conversation yet, so check for owner first.
+              if (request.auth.uid == userId) {
+                return true;
+              }
+              // If it has a conversation, check if the user is in the authorized list.
+              if ('conversationId' in task && task.conversationId != null) {
+                let conversation = get(/databases/$(database)/documents/task_conversations/$(task.conversationId)).data;
+                return request.auth.uid in conversation.authorizedUsers;
+              }
+              return false;
+            }
+
+            allow read: if isAuthorizedOnTask();
+            
+            allow create: if isAuthorizedOnTask() && request.resource.data.updatedBy.uid == request.auth.uid;
+            
+            // Only owner can update/delete logs for data integrity.
+            allow update, delete: if request.auth.uid == userId;
+        }
+      }
+    }
+
+    // --- RULES FOR TASK CONVERSATIONS & COMMENTS ---
+    match /task_conversations/{conversationId} {
+      allow create: if request.auth.uid in request.resource.data.authorizedUsers;
+      allow read, update: if request.auth.uid in resource.data.authorizedUsers;
+      
+      match /comments/{commentId} {
+        allow list, get: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers;
+        allow create: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers &&
+                       request.resource.data.authorId == request.auth.uid;
       }
     }
   }
