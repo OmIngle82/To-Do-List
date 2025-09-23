@@ -11,42 +11,17 @@ service cloud.firestore {
 
       match /tasks/{taskId} {
         allow read, write: if request.auth.uid == userId;
-
         allow create: if request.auth.uid != null &&
                       request.auth.uid != userId &&
                       (request.resource.data.sharedBy.uid == request.auth.uid ||
                        request.resource.data.assignedBy.uid == request.auth.uid);
-
         allow update: if request.auth.uid != null &&
                        request.auth.uid != userId &&
                        request.auth.uid == resource.data.assignedTo.uid &&
                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignedTo.status', 'assignedTo.completedAt']) &&
                        request.resource.data.assignedTo.status == 'completed';
         
-        // --- RULES FOR UPDATE LOGS ---
-        match /updates/{updateId} {
-            // Helper function to check if the user is the owner or an authorized collaborator
-            function isAuthorizedOnTask() {
-              let task = get(/databases/$(database)/documents/users/$(userId)/tasks/$(taskId)).data;
-              // A task might not have a conversation yet, so check for owner first.
-              if (request.auth.uid == userId) {
-                return true;
-              }
-              // If it has a conversation, check if the user is in the authorized list.
-              if ('conversationId' in task && task.conversationId != null) {
-                let conversation = get(/databases/$(database)/documents/task_conversations/$(task.conversationId)).data;
-                return request.auth.uid in conversation.authorizedUsers;
-              }
-              return false;
-            }
-
-            allow read: if isAuthorizedOnTask();
-            
-            allow create: if isAuthorizedOnTask() && request.resource.data.updatedBy.uid == request.auth.uid;
-            
-            // Only owner can update/delete logs for data integrity.
-            allow update, delete: if request.auth.uid == userId;
-        }
+        // DEPRECATED: Per-user update logs are moved to task_conversations
       }
     }
 
@@ -60,7 +35,14 @@ service cloud.firestore {
         allow create: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers &&
                        request.resource.data.authorId == request.auth.uid;
       }
+
+      // --- RULES FOR SHARED UPDATE LOGS ---
+      match /updates/{updateId} {
+        allow read: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers;
+        allow create: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers
+                       && request.resource.data.updatedBy.uid == request.auth.uid;
+        allow update, delete: if request.auth.uid == resource.data.updatedBy.uid;
+      }
     }
   }
 }
-

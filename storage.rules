@@ -1,25 +1,44 @@
 rules_version = '2';
 
 service firebase.storage {
-match /b/{bucket}/o {
+  match /b/{bucket}/o {
 
-// Profile photos can be read by anyone, but only written by the owner
-match /profile_photos/{userId}/{fileName} {
-  allow read;
-  allow write: if request.auth.uid == userId;
-}
+    // Helper function to check if a user is authorized on a conversation.
+    // Improved to safely handle cases where the conversation document does not exist.
+    function isAuthorizedForConversation(conversationId) {
+      let conversationPath = /databases/$(database)/documents/task_conversations/$(conversationId);
+      return exists(conversationPath) && request.auth.uid in get(conversationPath).data.authorizedUsers;
+    }
 
-// Rules for task attachments
-match /task_attachments/{userId}/{taskId}/{fileName} {
-  // Allow write if the user is the owner, and the file meets validation criteria.
-  allow write: if request.auth.uid == userId
-                  && request.resource.size < 10 * 1024 * 1024 // Max 10MB
-                  && request.resource.contentType.matches('image/.*|application/pdf|application/msword|text/plain|application/vnd.ms-excel|application/vnd.ms-powerpoint|application/vnd.openxmlformats-officedocument.wordprocessingml.document|application/vnd.openxmlformats-officedocument.spreadsheetml.sheet|application/vnd.openxmlformats-officedocument.presentationml.presentation');
-  
-  // Allow read only by the user who owns the task folder (the owner).
-  // This is more secure. Access for shared tasks must be handled via download URLs.
-  allow read: if request.auth.uid == userId;
-}
+    // Profile photos can be read by anyone, but only written by the owner
+    match /profile_photos/{userId}/{fileName} {
+      allow read;
+      allow write: if request.auth.uid == userId;
+    }
 
-}
+    // Rules for NEW shared task attachments
+    match /task_attachments/shared/{conversationId}/{fileName} {
+      allow read, write: if request.auth.uid != null && isAuthorizedForConversation(conversationId)
+                          // Granular size validation (10MB limit)
+                          && request.resource.size < 10 * 1024 * 1024
+                          // Enhanced content type matching for broader compatibility
+                          && request.resource.contentType.matches('image/.*|video/.*|application/pdf|application/zip|application/msword|text/plain|application/vnd.ms-excel|application/vnd.ms-powerpoint|application/vnd.openxmlformats-officedocument.*');
+    }
+
+    // Rules for LEGACY task attachments (serves as a robust fallback)
+    match /task_attachments/{userId}/{taskId}/{fileName} {
+      allow write: if request.auth.uid == userId
+                      // Granular size validation (10MB limit)
+                      && request.resource.size < 10 * 1024 * 1024
+                      // Enhanced content type matching for broader compatibility
+                      && request.resource.contentType.matches('image/.*|video/.*|application/pdf|application/zip|application/msword|text/plain|application/vnd.ms-excel|application/vnd.ms-powerpoint|application/vnd.openxmlformats-officedocument.*');
+      allow read: if request.auth.uid == userId;
+    }
+    
+    // Temporary debug rules to help diagnose permission issues
+    match /debug_uploads/{userId}/{fileName} {
+        allow read, write: if request.auth.uid == userId;
+    }
+
+  }
 }

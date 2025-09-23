@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Task Management App</title>
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- Flatpickr Date Picker -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <!-- My Stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -20,7 +17,6 @@
                 <h1 class="logo"><i class="fa-solid fa-list-check"></i> Task Manager</h1>
             </div>
             <nav class="navigation">
-                <!-- Links shown/hidden by JS -->
                 <a href="#" id="signin-link" class="nav-link">Sign In</a>
                 <a href="#" id="signup-link" class="nav-link">Sign Up</a>
                 <div id="profile-menu" class="profile-menu hide">
@@ -34,7 +30,6 @@
         </header>
 
         <main class="app-container">
-            <!-- Sign In Page -->
             <section id="signin-page" class="page">
                 <h2 class="form-title">Sign In</h2>
                 <p id="signin-feedback" class="feedback"></p>
@@ -46,7 +41,6 @@
                 </form>
             </section>
 
-            <!-- Sign Up Page -->
             <section id="signup-page" class="page hide">
                 <h2 class="form-title">Sign Up</h2>
                 <p id="signup-feedback" class="feedback"></p>
@@ -58,7 +52,6 @@
                 </form>
             </section>
             
-            <!-- Profile Settings Page -->
             <section id="profile-page" class="page hide">
                 <h2 class="form-title">Profile Settings</h2>
                 <p id="profile-feedback" class="feedback"></p>
@@ -117,7 +110,6 @@
                 </form>
             </section>
 
-            <!-- To-Do List Page -->
             <section id="todo-page" class="page hide">
                 <div class="todo-header">
                     <div class="top-bar">
@@ -181,7 +173,6 @@
         </main>
     </div>
 
-    <!-- Modals -->
     <div id="task-modal" class="modal-overlay hide">
         <div class="modal-content">
             <form id="task-form">
@@ -233,6 +224,14 @@
                     <input type="file" id="task-attachments-input" multiple>
                     <div id="attachments-list-modal" class="attachments-list-preview"></div>
                 </div>
+
+                <div id="upload-debug-panel" class="debug-panel" style="display: none;">
+                    <h4>Upload Debug Information</h4>
+                    <div id="auth-status">Authentication: <span id="auth-status-text">Checking...</span></div>
+                    <div id="storage-path">Storage Path: <span id="storage-path-text">Not determined</span></div>
+                    <div id="conversation-status">Conversation: <span id="conversation-status-text">Checking...</span></div>
+                    <div id="permission-test">Permissions: <span id="permission-test-text">Not tested</span></div>
+                </div>
                 
                 <div class="modal-actions">
                     <button type="button" id="modal-cancel-btn" class="modal-btn cancel-btn">Cancel</button>
@@ -280,7 +279,6 @@
     </div>
 
 
-    <!-- Team Mode Modals -->
     <div id="team-welcome-modal" class="modal-overlay hide">
         <div class="modal-content">
             <h2 id="welcome-user-name">Welcome to Team Mode!</h2>
@@ -309,15 +307,12 @@
     </div>
 
 
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-storage-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-messaging-compat.js"></script>
-    <!-- Flatpickr -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <!-- My Scripts -->
     <script src="script.js"></script>
     <script src="ai-suggestions.js"></script>
     <script src="teammode.js"></script>

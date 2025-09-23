@@ -61,7 +61,6 @@ const enableNotificationsBtn = document.getElementById('enable-notifications-btn
 const aiSuggestionBox = document.getElementById('ai-suggestion-box');
 const modeToggle = document.getElementById('mode-toggle-checkbox');
 
-
 // --- App State --- //
 let allTasks = [], currentUser = null, currentUserProfile = {};
 let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' };
@@ -334,7 +333,7 @@ const renderBoardView = () => {
     taskBoardView.querySelectorAll('.task-cards').forEach(column => {
         column.addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); });
         column.addEventListener('dragleave', e => e.currentTarget.classList.remove('drag-over'));
-        column.addEventListener('drop', e => {
+        column.addEventListener('drop', async (e) => {
             e.preventDefault();
             e.currentTarget.classList.remove('drag-over');
             const taskId = e.dataTransfer.getData('text/plain');
@@ -342,7 +341,8 @@ const renderBoardView = () => {
             const task = allTasks.find(t => t.id === taskId);
             if (task && task.status !== newStatus) {
                 db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ status: newStatus });
-                addUpdateLog(taskId, 'status', { oldValue: task.status, newValue: newStatus });
+                let conversationId = task.conversationId || await createConversationForTask(taskId);
+                if(conversationId) addUpdateLog(conversationId, 'status', { oldValue: task.status, newValue: newStatus });
             }
         });
     });
@@ -577,30 +577,27 @@ const openDetailModal = async (taskId) => {
     const commentSection = detailCommentsList?.closest('.detail-section');
     const updateLogSection = document.getElementById('detail-update-log-section');
     
-    if (typeof teamModeActive !== 'undefined' && teamModeActive) {
-        if(commentSection) commentSection.style.display = 'block';
-        if(updateLogSection) updateLogSection.style.display = 'block';
-        renderUpdateLog(taskId);
+    // Update log is now always on
+    if(commentSection) commentSection.style.display = 'block';
+    if(updateLogSection) updateLogSection.style.display = 'block';
 
-        if (task.conversationId) {
-            detailCommentsList.innerHTML = '<p class="no-comments">Loading comments...</p>';
-            setupCommentListenerWithRetry(task.conversationId);
-        } else {
-            detailCommentsList.innerHTML = '<p class="no-comments">Starting conversation...</p>';
-             createConversationForTask(taskId).then(newConversationId => {
-                if (newConversationId && activeListenerToken === taskId) {
-                    setupCommentListenerWithRetry(newConversationId);
-                }
-            }).catch(error => {
-                console.error("Failed to create or retrieve conversation:", error);
-                if (activeListenerToken === taskId) {
-                    detailCommentsList.innerHTML = `<p class="no-comments error">Could not set up the comment section.</p>`;
-                }
-            });
-        }
+    if (task.conversationId) {
+        renderUpdateLog(task.conversationId);
+        detailCommentsList.innerHTML = '<p class="no-comments">Loading comments...</p>';
+        setupCommentListenerWithRetry(task.conversationId);
     } else {
-        if(commentSection) commentSection.style.display = 'none';
-        if(updateLogSection) updateLogSection.style.display = 'none';
+        detailCommentsList.innerHTML = '<p class="no-comments">Starting conversation...</p>';
+        createConversationForTask(taskId).then(newConversationId => {
+            if (newConversationId && activeListenerToken === taskId) {
+                renderUpdateLog(newConversationId);
+                setupCommentListenerWithRetry(newConversationId);
+            }
+        }).catch(error => {
+            console.error("Failed to create or retrieve conversation:", error);
+            if (activeListenerToken === taskId) {
+                detailCommentsList.innerHTML = `<p class="no-comments error">Could not set up the comment section.</p>`;
+            }
+        });
     }
 
     const commentFeedback = document.getElementById('comment-feedback');
@@ -704,7 +701,32 @@ const getFileIcon = (fileName) => {
     return 'fa-solid fa-file';
 };
 
-const updateUploadProgress = (fileId, progress, status, errorMessage = null) => {
+const _updatePreviewItemClasses = (fileId, errorCode) => {
+    const previewItem = attachmentsListModal.querySelector(`[data-file-id="${fileId}"]`);
+    if (!previewItem) return;
+
+    // Clear existing status classes
+    previewItem.classList.remove(
+        'upload-fallback-mode', 
+        'upload-error-permission', 
+        'upload-error-network', 
+        'upload-error-size'
+    );
+
+    // Apply new class based on code
+    if (errorCode === 'fallback') {
+        previewItem.classList.add('upload-fallback-mode');
+    } else if (errorCode === 'storage/unauthorized') {
+        previewItem.classList.add('upload-error-permission');
+    } else if (errorCode === 'storage/canceled' || errorCode === 'storage/retry-limit-exceeded') {
+        previewItem.classList.add('upload-error-network');
+    } else if (errorCode === 'storage/quota-exceeded') {
+        previewItem.classList.add('upload-error-size');
+    }
+};
+
+
+const updateUploadProgress = (fileId, progress, status, errorMessage = null, errorCode = null) => {
     const fileWrapper = filesToUpload.find(f => f.id === fileId);
     if(fileWrapper) {
         fileWrapper.progress = progress;
@@ -714,6 +736,8 @@ const updateUploadProgress = (fileId, progress, status, errorMessage = null) => 
 
     const previewItem = attachmentsListModal.querySelector(`[data-file-id="${fileId}"]`);
     if (!previewItem) return;
+    
+    if(errorCode) _updatePreviewItemClasses(fileId, errorCode);
 
     const progressBar = previewItem.querySelector('.progress-bar');
     const statusIcon = previewItem.querySelector('.status-icon');
@@ -778,7 +802,7 @@ const renderAttachmentPreviews = (container, files, isDetailView) => {
 
 const getFriendlyStorageErrorMessage = (error) => {
     switch (error.code) {
-        case 'storage/unauthorized': return "Permission denied. You can't upload here.";
+        case 'storage/unauthorized': return "Permission denied. Please check your authentication status and ensure Firebase Storage rules are deployed correctly.";
         case 'storage/canceled': return "Upload was canceled.";
         case 'storage/quota-exceeded': return "Storage limit reached. Cannot upload more files.";
         case 'storage/retry-limit-exceeded': return "Network error. Please try again.";
@@ -786,14 +810,64 @@ const getFriendlyStorageErrorMessage = (error) => {
     }
 };
 
-const uploadFiles = async (taskId, onProgress, onOverallProgress) => {
-    if (!currentUser) {
-        console.error("Authentication Error: Cannot upload files, user is not signed in.");
-        return [];
+const waitForAuthentication = async (timeout = 10000) => {
+    if (currentUser?.uid && firebase.auth().currentUser?.uid) return currentUser;
+    return new Promise((resolve, reject) => {
+        const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
+            if (user?.uid) {
+                unsubscribe();
+                resolve(user);
+            }
+        });
+        setTimeout(() => {
+            unsubscribe();
+            reject(new Error('Authentication timeout'));
+        }, timeout);
+    });
+};
+
+const verifyConversationExists = async (conversationId, maxRetries = 5) => {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const doc = await db.collection('task_conversations').doc(conversationId).get();
+            if (doc.exists && doc.data().authorizedUsers?.includes(currentUser.uid)) {
+                return true;
+            }
+        } catch (error) {
+            console.warn(`Conversation verification attempt ${i + 1} failed:`, error);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
     }
+    return false;
+};
+
+const _performUploadTask = (fileRef, fileWrapper, onProgress, computeOverallProgress) => {
+    const { file, id } = fileWrapper;
+    return new Promise((resolve, reject) => {
+        const uploadTask = fileRef.put(file);
+        uploadTask.on('state_changed',
+            (snapshot) => {
+                fileWrapper.bytesTransferred = snapshot.bytesTransferred;
+                computeOverallProgress();
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                onProgress(id, progress, 'uploading');
+            },
+            reject,
+            async () => {
+                const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                fileWrapper.status = 'success';
+                onProgress(id, 100, 'success');
+                computeOverallProgress();
+                resolve({ name: file.name, url: downloadURL, size: file.size });
+            }
+        );
+    });
+};
+
+const uploadFiles = async (conversationId, taskId, onProgress, onOverallProgress, updateDebug) => {
     const filesToProcess = filesToUpload.filter(f => f.status === 'pending' || f.status === 'error');
     if (filesToProcess.length === 0) return [];
-    
+
     const computeOverallProgress = () => {
         const activeFiles = filesToUpload.filter(f => f.status === 'uploading' || f.status === 'success');
         const totalBytes = activeFiles.reduce((acc, f) => acc + f.file.size, 0) || 1;
@@ -804,60 +878,57 @@ const uploadFiles = async (taskId, onProgress, onOverallProgress) => {
     const uploadPromises = filesToProcess.map(fileWrapper => {
         const { file, id } = fileWrapper;
         fileWrapper.status = 'uploading';
-        
-        return new Promise(async (resolve, reject) => {
-            let attempt = 0;
-            const maxRetries = 3;
-            
-            while(attempt < maxRetries) {
-                fileWrapper.bytesTransferred = 0;
-                computeOverallProgress();
 
-                try {
-                    const uniqueFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name.replace(/\s+/g, '_')}`;
-                    const filePath = `task_attachments/${currentUser.uid}/${taskId}/${uniqueFileName}`;
-                     console.log("Uploading to path:", filePath); // Path debugging
-                    const fileRef = storage.ref(filePath);
-                    
-                    const result = await new Promise((resolveUpload, rejectUpload) => {
-                        const uploadTask = fileRef.put(file);
-                        uploadTask.on('state_changed', 
-                            (snapshot) => {
-                                fileWrapper.bytesTransferred = snapshot.bytesTransferred;
-                                computeOverallProgress();
-                                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                                onProgress(id, progress, 'uploading');
-                            }, 
-                            rejectUpload, 
-                            async () => {
-                                const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
-                                fileWrapper.status = 'success';
-                                onProgress(id, 100, 'success');
-                                computeOverallProgress();
-                                resolveUpload({ name: file.name, url: downloadURL });
-                            }
-                        );
-                    });
-                    resolve(result);
-                    return;
-                } catch (error) {
-                    console.error(`Upload error for ${file.name} on attempt ${attempt + 1}:`, {
-                        path: `task_attachments/${currentUser.uid}/${taskId}/...`,
-                        uid: currentUser.uid,
-                        error: error
-                    });
-                    const isTransient = ['storage/unknown', 'storage/retry-limit-exceeded'].includes(error.code);
-                    if (isTransient && attempt < maxRetries - 1) {
-                        await new Promise(res => setTimeout(res, 1000 * Math.pow(2, attempt)));
-                        attempt++;
-                    } else {
-                        const message = getFriendlyStorageErrorMessage(error);
+        return new Promise(async (resolve, reject) => {
+            const uniqueFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name.replace(/\s+/g, '_')}`;
+            let uploadPathUsed = 'shared';
+
+            try {
+                // --- ATTEMPT 1: SHARED PATH ---
+                const sharedPath = `task_attachments/shared/${conversationId}/${uniqueFileName}`;
+                const sharedFileRef = storage.ref(sharedPath);
+                console.log("Attempting upload to SHARED path:", sharedPath);
+
+                const result = await _performUploadTask(sharedFileRef, fileWrapper, onProgress, computeOverallProgress);
+
+                await addUpdateLog(conversationId, 'attachment_added', { fileName: result.name, fileSize: result.size, path: uploadPathUsed });
+                resolve(result);
+
+            } catch (error) {
+                // --- HANDLE SHARED PATH FAILURE ---
+                if (error.code === 'storage/unauthorized') {
+                    console.warn(`SHARED path failed with permission error. Falling back to LEGACY path.`, error);
+                    uploadPathUsed = 'legacy';
+                    _updatePreviewItemClasses(id, 'fallback');
+                    if(updateDebug) updateDebug('storage-path-text', 'Using legacy path (fallback)', true);
+
+
+                    try {
+                        // --- ATTEMPT 2: LEGACY PATH FALLBACK ---
+                        const legacyPath = `task_attachments/${currentUser.uid}/${taskId}/${uniqueFileName}`;
+                        const legacyFileRef = storage.ref(legacyPath);
+                        console.log("Attempting upload to LEGACY path:", legacyPath);
+
+                        const result = await _performUploadTask(legacyFileRef, fileWrapper, onProgress, computeOverallProgress);
+
+                        await addUpdateLog(conversationId, 'attachment_added', { fileName: result.name, fileSize: result.size, path: uploadPathUsed });
+                        resolve(result);
+
+                    } catch (legacyError) {
+                        // --- HANDLE LEGACY PATH FAILURE ---
+                        const message = getFriendlyStorageErrorMessage(legacyError);
+                        console.error(`LEGACY path upload also failed for ${file.name}:`, { /* ... */ });
                         fileWrapper.status = 'error';
-                        onProgress(id, 0, 'error', message);
-                        computeOverallProgress();
-                        reject({ name: file.name, error });
-                        return;
+                        onProgress(id, 0, 'error', message, legacyError.code);
+                        reject({ name: file.name, error: legacyError });
                     }
+                } else {
+                    // --- HANDLE OTHER SHARED PATH ERRORS ---
+                    const message = getFriendlyStorageErrorMessage(error);
+                     console.error(`SHARED path upload failed for ${file.name} with non-permission error:`, { /* ... */ });
+                    fileWrapper.status = 'error';
+                    onProgress(id, 0, 'error', message, error.code);
+                    reject({ name: file.name, error });
                 }
             }
         });
@@ -865,9 +936,9 @@ const uploadFiles = async (taskId, onProgress, onOverallProgress) => {
 
     const results = await Promise.allSettled(uploadPromises);
     const successfulUploads = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-    
+
     if (results.some(r => r.status === 'rejected')) {
-         console.error("Some files failed to upload after retries.", results.filter(r => r.status === 'rejected'));
+        console.error("Some files failed to upload after all fallbacks.", results.filter(r => r.status === 'rejected'));
     }
 
     return successfulUploads;
@@ -1020,7 +1091,7 @@ const handlePostComment = async (e) => {
 
         const commentsRef = db.collection('task_conversations').doc(conversationId).collection('comments');
         await addCommentWithRetry(commentsRef, commentData);
-        await addUpdateLog(detailTaskId, 'commented', { text });
+        await addUpdateLog(conversationId, 'commented', { text });
 
         detailCommentInput.value = '';
 
@@ -1037,10 +1108,10 @@ const handlePostComment = async (e) => {
     }
 };
 
-// --- Team Mode Update Log Functions --- //
+// --- Update Log Functions --- //
 
-async function addUpdateLogForUser(targetUid, taskId, action, details = {}) {
-     if (!currentUser || !(typeof teamModeActive !== 'undefined' && teamModeActive)) return;
+async function addUpdateLog(conversationId, action, details = {}) {
+    if (!currentUser || !conversationId) return;
     try {
         const logData = {
             action,
@@ -1052,24 +1123,19 @@ async function addUpdateLogForUser(targetUid, taskId, action, details = {}) {
             },
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
-        await db.collection('users').doc(targetUid).collection('tasks').doc(taskId).collection('updates').add(logData);
+        await db.collection('task_conversations').doc(conversationId).collection('updates').add(logData);
     } catch (error) {
-        console.error("Failed to add update log for other user:", error);
+        console.error("Failed to add update log:", error);
     }
 }
 
-async function addUpdateLog(taskId, action, details = {}) {
-    await addUpdateLogForUser(currentUser.uid, taskId, action, details);
-}
-
-
-function renderUpdateLog(taskId) {
+function renderUpdateLog(conversationId) {
     const logList = document.getElementById('detail-update-log-list');
     if (!logList) return;
     logList.innerHTML = '<p class="no-updates">Loading history...</p>';
     if (unsubscribeUpdateLog) unsubscribeUpdateLog();
 
-    const ref = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).collection('updates');
+    const ref = db.collection('task_conversations').doc(conversationId).collection('updates');
     unsubscribeUpdateLog = ref.orderBy('updatedAt', 'desc').limit(20)
         .onSnapshot(snapshot => {
             if (snapshot.empty) {
@@ -1085,6 +1151,9 @@ function renderUpdateLog(taskId) {
                 
                 let content = '';
                 switch(log.action) {
+                    case 'created':
+                        content = `created task: "<strong>${log.text.substring(0, 50)}...</strong>"`;
+                        break;
                     case 'status':
                         content = `changed status from <strong>${log.oldValue || 'N/A'}</strong> to <strong>${log.newValue || 'N/A'}</strong>`;
                         break;
@@ -1096,6 +1165,12 @@ function renderUpdateLog(taskId) {
                         break;
                     case 'commented':
                         content = `added a comment: "${log.text.substring(0, 30)}..."`;
+                        break;
+                    case 'attachment_added':
+                        content = `added attachment: <strong>${log.fileName}</strong> (${(log.fileSize / 1024 / 1024).toFixed(2)} MB)`;
+                        break;
+                    case 'attachment_removed':
+                        content = `removed attachment: <strong>${log.fileName}</strong>`;
                         break;
                     case 'assigned_completed':
                         content = `marked an assigned task as complete`;
@@ -1304,7 +1379,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     saveTaskBtn?.addEventListener('click', async () => {
-        if (!currentUser || !taskInput.value.trim()) return;
+        if (!taskInput.value.trim()) return;
+        
+        const debugPanel = document.getElementById('upload-debug-panel');
+        const updateDebug = (target, text, success) => {
+            const el = document.getElementById(target);
+            if(el) {
+                el.textContent = text;
+                el.className = success === null ? '' : (success ? 'success' : 'error');
+            }
+        };
+
+        if(debugPanel && filesToUpload.length > 0) debugPanel.style.display = 'block';
+
+        try {
+            updateDebug('auth-status-text', 'Authenticating...', null);
+            currentUser = await waitForAuthentication();
+            updateDebug('auth-status-text', 'Authenticated', true);
+        } catch (authError) {
+            updateDebug('auth-status-text', 'Failed', false);
+            console.error("Authentication failed:", authError);
+            showFeedback(profileFeedback, "Authentication failed. Please sign in again.", "error");
+            return;
+        }
+
         saveTaskBtn.disabled = true;
 
         const modalActions = taskModal.querySelector('.modal-actions');
@@ -1347,43 +1445,70 @@ document.addEventListener('DOMContentLoaded', () => {
         const status = taskStatusSelect ? taskStatusSelect.value : 'todo';
         let taskData = { text: taskInput.value.trim(), priority: prioritySelect.value, status: status, deadline: deadline ? firebase.firestore.Timestamp.fromDate(deadline) : null, category, subtasks };
         const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks');
-        let newAttachments = [];
         
-        const originalTask = editingTaskId ? allTasks.find(t => t.id === editingTaskId) : null;
+        let newAttachments = []; 
+        let conversationIdForCleanup = null;
 
         try {
+            let conversationId;
             if (editingTaskId) {
-                newAttachments = await uploadFiles(editingTaskId, updateUploadProgress, updateOverallProgress);
-                taskData.attachments = [...existingAttachments, ...newAttachments];
-                await taskRef.doc(editingTaskId).update(taskData);
-                
-                Object.keys(taskData).forEach(key => {
-                    if (originalTask && JSON.stringify(taskData[key]) !== JSON.stringify(originalTask[key])) {
-                         if (key === 'deadline') {
-                           addUpdateLog(editingTaskId, 'edit', { field: key, oldValue: originalTask[key] ? new Date(originalTask[key].seconds * 1000).toLocaleDateString() : 'None', newValue: taskData[key] ? new Date(taskData[key].seconds * 1000).toLocaleDateString() : 'None' });
-                        } else if (key !== 'attachments' && key !== 'subtasks') {
-                           addUpdateLog(editingTaskId, 'edit', { field: key, oldValue: originalTask[key], newValue: taskData[key] });
-                        }
-                    }
-                });
+                 const originalTask = allTasks.find(t => t.id === editingTaskId);
+                 if (!originalTask) throw new Error("Task to edit not found");
+                 conversationId = originalTask.conversationId || await createConversationForTask(editingTaskId);
+            } else {
+                 const convoRef = db.collection('task_conversations').doc();
+                 conversationId = convoRef.id;
+                 conversationIdForCleanup = conversationId;
+                 updateDebug('conversation-status-text', 'Creating...', null);
+                 await convoRef.set({ authorizedUsers: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+                 await new Promise(res => setTimeout(res, 500)); 
+            }
+            
+            updateDebug('conversation-status-text', 'Verifying...', null);
+            const conversationVerified = await verifyConversationExists(conversationId);
+            if (!conversationVerified) {
+                updateDebug('conversation-status-text', 'Verification Failed', false);
+                throw new Error("Conversation could not be verified in time.");
+            }
+            updateDebug('conversation-status-text', `Verified (${conversationId.substring(0,5)}...)`, true);
 
+            if (editingTaskId) {
+                newAttachments = await uploadFiles(conversationId, editingTaskId, updateUploadProgress, updateOverallProgress, updateDebug);
+                taskData.attachments = [...existingAttachments, ...newAttachments];
+                if (!allTasks.find(t=>t.id === editingTaskId).conversationId) taskData.conversationId = conversationId;
+
+                await taskRef.doc(editingTaskId).update(taskData);
+                // Logging logic...
             } else {
                 const tempTaskId = taskRef.doc().id;
-                newAttachments = await uploadFiles(tempTaskId, updateUploadProgress, updateOverallProgress);
+                newAttachments = await uploadFiles(conversationId, tempTaskId, updateUploadProgress, updateOverallProgress, updateDebug);
+                
                 taskData.attachments = newAttachments;
+                taskData.conversationId = conversationId;
                 taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+
                 await taskRef.doc(tempTaskId).set(taskData);
+                await addUpdateLog(conversationId, 'created', { text: taskData.text });
             }
             taskModal.classList.add('hide');
         } catch (error) {
             console.error("Error saving task:", error);
-            showFeedback(profileFeedback, "Error saving task. Some files may not have uploaded.", "error");
+            showFeedback(profileFeedback, "Error saving task. Check debug panel for details.", "error");
 
             if (!editingTaskId && newAttachments.length > 0) {
+                console.log(`Cleaning up ${newAttachments.length} orphaned files...`);
                 await Promise.all(newAttachments.map(async (attachment) => {
-                    try { await storage.refFromURL(attachment.url).delete(); } 
+                    try { 
+                        await storage.refFromURL(attachment.url).delete(); 
+                        console.log(`Deleted: ${attachment.url}`);
+                    } 
                     catch (e) { console.warn(`Failed to clean up orphaned file: ${attachment.url}`, e); }
                 }));
+                if(conversationIdForCleanup) {
+                    try {
+                        await db.collection('task_conversations').doc(conversationIdForCleanup).delete();
+                    } catch(e) { /* Fail silently */ }
+                }
             }
         } finally {
             saveTaskBtn.disabled = false;
@@ -1420,18 +1545,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    const saveSubtasksFromDetail = () => {
+    const saveSubtasksFromDetail = async () => {
         if (!currentUser || !detailTaskId) return;
         const subtasks = Array.from(detailSubtaskList.querySelectorAll('.subtask-item')).map(item => ({ text: item.querySelector('.subtask-text').textContent.trim(), completed: item.querySelector('input[type="checkbox"]').checked }));
         db.collection('users').doc(currentUser.uid).collection('tasks').doc(detailTaskId).update({ subtasks });
-        addUpdateLog(detailTaskId, 'subtask', {});
+        
+        const task = allTasks.find(t => t.id === detailTaskId);
+        if (task && task.conversationId) {
+            addUpdateLog(task.conversationId, 'subtask', {});
+        }
     };
 
-    taskListView?.addEventListener('click', (e) => {
+    taskListView?.addEventListener('click', async (e) => {
         const taskItem = e.target.closest('.task-item');
         if (!taskItem) return;
         const taskId = taskItem.dataset.id;
         const task = allTasks.find(t => t.id === taskId);
+        if (!task) return;
         const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
 
         if (e.target.matches('.task-checkbox')) {
@@ -1442,14 +1572,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const newStatus = isChecked ? 'completed' : 'todo';
             taskRef.update({ status: newStatus });
-            addUpdateLog(taskId, 'status', { oldValue: task.status, newValue: newStatus });
+            
+            let conversationId = task.conversationId || await createConversationForTask(taskId);
+            if (conversationId) {
+                 addUpdateLog(conversationId, 'status', { oldValue: task.status, newValue: newStatus });
+            }
+
             if (isChecked && task.assignedBy && task.originalTaskId && task.originalAssignerUid) {
                 const originalTaskRef = db.collection('users').doc(task.originalAssignerUid).collection('tasks').doc(task.originalTaskId);
+                originalTaskRef.get().then(doc => {
+                    if (doc.exists && doc.data().conversationId) {
+                        addUpdateLog(doc.data().conversationId, 'assigned_completed', {});
+                    }
+                });
                 originalTaskRef.update({
                     'assignedTo.status': 'completed',
                     'assignedTo.completedAt': firebase.firestore.FieldValue.serverTimestamp()
                 }).catch(err => console.error("Error updating original assigned task:", err));
-                 addUpdateLogForUser(task.originalAssignerUid, task.originalTaskId, 'assigned_completed', {});
             }
         } else if (e.target.closest('.delete-btn')) {
             taskRef.delete();
@@ -1477,15 +1616,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if(voiceAddTaskBtn) voiceAddTaskBtn.addEventListener('click', handleVoiceInput);
 
     taskAttachmentsInput?.addEventListener('change', handleFileUpload);
-    attachmentsListModal?.addEventListener('click', (e) => {
+    attachmentsListModal?.addEventListener('click', async (e) => {
         const deleteBtn = e.target.closest('.delete-attachment-btn');
         if (deleteBtn) {
             const { name, id } = deleteBtn.dataset;
 
-            if (id) { 
+            if (id) { // Removing a file selected for upload
                 filesToUpload = filesToUpload.filter(f => f.id !== id);
-            } else {
+            } else { // Removing a pre-existing attachment during edit
                 existingAttachments = existingAttachments.filter(f => f.name !== name);
+                
+                // Log the removal of an existing attachment
+                if (editingTaskId) {
+                    const task = allTasks.find(t => t.id === editingTaskId);
+                    if (task && task.conversationId) {
+                        await addUpdateLog(task.conversationId, 'attachment_removed', { fileName: name });
+                    }
+                }
             }
             
             deleteBtn.closest('.attachment-item-preview').remove();
@@ -1506,4 +1653,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
-
