@@ -196,21 +196,39 @@ async function handleSendFormSubmit(e) {
 async function executeShare(recipientUid) {
     const sharerDisplayName = currentUserProfile.displayName || currentUser.email.split('@')[0];
     const batch = db.batch();
+    const senderTasksRef = db.collection('users').doc(currentUser.uid).collection('tasks');
     const recipientTasksRef = db.collection('users').doc(recipientUid).collection('tasks');
+
     for (const taskId of tasksToProcess) {
         const originalTask = allTasks.find(t => t.id === taskId);
-        if (originalTask && originalTask.conversationId) {
-            const { id, ...taskData } = originalTask;
-            const newDocRef = recipientTasksRef.doc();
-            batch.set(newDocRef, {
-                ...taskData, status: 'todo', createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                sharedBy: { name: sharerDisplayName, uid: currentUser.uid }
-            });
-            const convoRef = db.collection('task_conversations').doc(originalTask.conversationId);
-            batch.update(convoRef, {
-                authorizedUsers: firebase.firestore.FieldValue.arrayUnion(recipientUid)
-            });
+        if (!originalTask) continue;
+
+        let conversationId = originalTask.conversationId;
+
+        // **FIX:** If no conversation exists, create one before sharing.
+        if (!conversationId) {
+            const convoRef = db.collection('task_conversations').doc();
+            conversationId = convoRef.id;
+            batch.set(convoRef, { authorizedUsers: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+            const originalTaskRef = senderTasksRef.doc(taskId);
+            batch.update(originalTaskRef, { conversationId: conversationId });
         }
+        
+        const { id, ...taskData } = originalTask;
+        const newDocRef = recipientTasksRef.doc();
+        batch.set(newDocRef, {
+            ...taskData,
+            conversationId: conversationId, // Ensure the new task has the correct conversationId
+            status: 'todo',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            sharedBy: { name: sharerDisplayName, uid: currentUser.uid }
+        });
+
+        // Add recipient to the authorized users list for the conversation
+        const convoRef = db.collection('task_conversations').doc(conversationId);
+        batch.update(convoRef, {
+            authorizedUsers: firebase.firestore.FieldValue.arrayUnion(recipientUid)
+        });
     }
     await batch.commit();
 }
@@ -222,25 +240,42 @@ async function executeAssign(recipientUid, recipientName) {
     const senderName = currentUserProfile.displayName || currentUser.email.split('@')[0];
     for (const taskId of tasksToProcess) {
         const originalTask = allTasks.find(t => t.id === taskId);
-        if (originalTask && originalTask.conversationId) {
-            const { id, ...taskData } = originalTask;
-            const newRecipientTaskRef = recipientTasksRef.doc();
-            batch.set(newRecipientTaskRef, {
-                ...taskData, status: 'todo', category: 'Assigned',
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                assignedBy: { name: senderName, uid: currentUser.uid },
-                originalTaskId: taskId,
-                originalAssignerUid: currentUser.uid,
-            });
+        if (!originalTask) continue;
+
+        let conversationId = originalTask.conversationId;
+
+        // **FIX:** If no conversation exists, create one before assigning.
+        if (!conversationId) {
+            const convoRef = db.collection('task_conversations').doc();
+            conversationId = convoRef.id;
+            batch.set(convoRef, { authorizedUsers: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
             const originalTaskRef = senderTasksRef.doc(taskId);
-            batch.update(originalTaskRef, {
-                assignedTo: { name: recipientName, uid: recipientUid, status: 'pending' }
-            });
-            const convoRef = db.collection('task_conversations').doc(originalTask.conversationId);
-            batch.update(convoRef, {
-                authorizedUsers: firebase.firestore.FieldValue.arrayUnion(recipientUid)
-            });
+            batch.update(originalTaskRef, { conversationId: conversationId });
         }
+        
+        const { id, ...taskData } = originalTask;
+        const newRecipientTaskRef = recipientTasksRef.doc();
+        batch.set(newRecipientTaskRef, {
+            ...taskData,
+            conversationId: conversationId, // Ensure the new task has the correct conversationId
+            status: 'todo',
+            category: 'Assigned',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            assignedBy: { name: senderName, uid: currentUser.uid },
+            originalTaskId: taskId,
+            originalAssignerUid: currentUser.uid,
+        });
+        
+        const originalTaskRef = senderTasksRef.doc(taskId);
+        batch.update(originalTaskRef, {
+            assignedTo: { name: recipientName, uid: recipientUid, status: 'pending' }
+        });
+
+        // Add recipient to the authorized users list for the conversation
+        const convoRef = db.collection('task_conversations').doc(conversationId);
+        batch.update(convoRef, {
+            authorizedUsers: firebase.firestore.FieldValue.arrayUnion(recipientUid)
+        });
     }
     await batch.commit();
 }
