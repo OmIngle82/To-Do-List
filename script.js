@@ -1232,26 +1232,7 @@ const setupNotifications = () => {
     });
 };
 
-const handleVoiceInput = () => {
-    if (recognition) {
-        voiceAddTaskBtn?.classList.add('active');
-        recognition.start();
-        recognition.onend = () => voiceAddTaskBtn?.classList.remove('active');
-        recognition.onresult = (event) => {
-            const speechToText = event.results[0][0].transcript;
-            openTaskModal();
-            taskInput.value = speechToText;
-            taskInput.dispatchEvent(new Event('keyup'));
-        };
-        recognition.onerror = (event) => {
-             console.error("Speech Recognition Error:", event.error);
-             voiceAddTaskBtn?.classList.remove('active');
-        };
-    } else {
-        alert("Sorry, your browser doesn't support Speech Recognition.");
-        if (voiceAddTaskBtn) voiceAddTaskBtn.style.display = 'none';
-    }
-};
+
 
 // --- Utility Functions --- //
 function shadeColor(color, percent) {
@@ -1620,7 +1601,6 @@ document.addEventListener('DOMContentLoaded', () => {
     priorityFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { priorityFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentPriorityFilter = e.target.dataset.priority; renderCurrentView(); } });
 
     if(enableNotificationsBtn) enableNotificationsBtn.addEventListener('click', setupNotifications);
-    if(voiceAddTaskBtn) voiceAddTaskBtn.addEventListener('click', handleVoiceInput);
 
     taskAttachmentsInput?.addEventListener('change', handleFileUpload);
     attachmentsListModal?.addEventListener('click', async (e) => {
