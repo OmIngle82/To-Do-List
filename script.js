@@ -97,14 +97,6 @@ let filesToUpload = []; // Stores objects: { file, id, progress, status, error }
 // --- Initializations --- //
 let datePicker, timePicker, dateFilterInstance;
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition;
-if (SpeechRecognition) {
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.lang = 'en-US';
-}
-
 // --- Page & UI Management --- //
 const showPage = (pageId) => {
     [signinPage, signupPage, todoPage, profilePage].forEach(page => page.classList.add('hide'));
@@ -163,6 +155,17 @@ const applyUserPreferences = (prefs = {}) => {
     accentColorPicker?.querySelectorAll('.color-swatch').forEach(swatch => {
         swatch.classList.toggle('active', swatch.dataset.color === userPreferences.accentColor);
     });
+};
+
+const updateUserPreference = async (key, value) => {
+    if (!currentUser) return;
+    const prefs = {};
+    prefs[`preferences.${key}`] = value;
+    try {
+        await db.collection('users').doc(currentUser.uid).update(prefs);
+    } catch (error) {
+        console.error(`Failed to update preference '${key}':`, error);
+    }
 };
 
 // --- Data Listeners --- //
@@ -1356,7 +1359,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(snapshot => snapshot.ref.getDownloadURL()
             .then(url => db.collection('users').doc(currentUser.uid).set({ photoURL: url }, { merge: true })));
     });
-    themeToggle?.addEventListener('change', (e) => { userPreferences.theme = e.target.checked ? 'dark' : 'light'; applyUserPreferences(userPreferences); });
+     themeToggle?.addEventListener('change', (e) => {
+        userPreferences.theme = e.target.checked ? 'dark' : 'light';
+        applyUserPreferences(userPreferences);
+        updateUserPreference('theme', userPreferences.theme);
+    });
     accentColorPicker?.addEventListener('click', (e) => { if (e.target.matches('.color-swatch')) { userPreferences.accentColor = e.target.dataset.color; applyUserPreferences(userPreferences); } });
     layoutSwitcher?.addEventListener('change', (e) => {
         if (e.target.matches('input[name="layout"]')) {

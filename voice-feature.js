@@ -49,9 +49,9 @@ document.addEventListener('DOMContentLoaded', () => {
             taskInput.value = transcript.charAt(0).toUpperCase() + transcript.slice(1);
 
             // Trigger the AI suggestion if it exists
-            if (typeof getAISuggestion === 'function') {
-                taskInput.dispatchEvent(new Event('keyup'));
-            }
+            
+            taskInput.dispatchEvent(new Event('keyup'));
+            
         };
 
         voiceAddTaskBtn.addEventListener('click', () => {

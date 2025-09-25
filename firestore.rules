@@ -7,10 +7,10 @@ service cloud.firestore {
     match /users/{userId} {
       // This rule is the fix: It allows any signed-in user to 'get' any
       // single user's profile document. This is needed to display names in comments.
-      allow get: if request.auth.uid != null;
+      allow get, list: if request.auth.uid != null;
       
       // A user can only update their own profile.
-      allow update: if request.auth.uid == userId;
+      allow create, update: if request.auth.uid == userId;
 
       match /tasks/{taskId} {
         allow read, write: if request.auth.uid == userId;
