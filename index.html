@@ -23,6 +23,7 @@
                     <img src="https://placehold.co/40x40/EFEFEF/333?text=P" alt="Profile" id="menu-profile-photo" class="menu-profile-photo">
                     <div class="profile-dropdown">
                         <a href="#" id="profile-link" class="dropdown-link">View Profile</a>
+                        <a href="#" id="analytics-link" class="dropdown-link">Analytics</a>
                         <a href="#" id="logout-btn" class="dropdown-link">Sign Out</a>
                     </div>
                 </div>
@@ -72,6 +73,7 @@
                             <div class="stat-card"><h4>Total</h4><p id="stat-total">0</p></div>
                             <div class="stat-card"><h4>Pending</h4><p id="stat-pending">0</p></div>
                             <div class="stat-card"><h4>Completed</h4><p id="stat-completed">0</p></div>
+                            <div class="stat-card"><h4>Productivity</h4><p id="stat-score">0%</p></div>
                         </div>
                     </div>
 
@@ -105,11 +107,30 @@
                         <h3>Smart Features</h3>
                         <button type="button" id="enable-notifications-btn" class="settings-btn">Enable Reminders</button>
                     </div>
-
+                    <div class="settings-section">
+                        <div class="settings-section-header">
+                            <h3><i class="fas fa-trophy"></i> Achievements</h3>
+                            <button type="button" id="reset-achievements-btn" class="settings-btn danger-btn">Reset Achievements</button>
+                        </div>
+                        <div id="achievements-container">
+                        </div>
+                    </div>
                     <button type="submit" class="auth-btn">Save Profile</button>
                 </form>
             </section>
+            <section id="analytics-page" class="page hide">
+                <h2 class="form-title">Your Analytics & Reports</h2>
+                
+                <div class="report-section">
+                    <h3>Daily Report</h3>
+                    <p>Tasks completed today: <strong id="daily-completed-count">0</strong></p>
+                </div>
 
+                <div class="report-section">
+                    <h3>Weekly Report</h3>
+                    <p>Tasks completed this week: <strong id="weekly-completed-count">0</strong></p>
+                </div>
+            </section>
             <section id="todo-page" class="page hide">
                 <div class="todo-header">
                     <div class="top-bar">
@@ -303,6 +324,18 @@
                     <button type="submit" class="modal-btn save-btn">Send</button>
                 </div>
             </form>
+        </div>
+    </div>
+        <div id="badge-modal" class="modal-overlay hide">
+        <div class="modal-content achievement-modal">
+            <span class="achievement-icon">🏆</span>
+            <h2>Achievement Unlocked!</h2>
+            <div class="unlocked-badge-info">
+                <i id="badge-modal-icon" class="fas"></i>
+                <h3 id="badge-modal-name">Badge Name</h3>
+            </div>
+            <p>You can view all your achievements in the profile section.</p>
+            <button id="badge-modal-ok-btn" class="modal-btn save-btn">Awesome!</button>
         </div>
     </div>
 

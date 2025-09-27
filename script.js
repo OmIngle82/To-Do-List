@@ -60,6 +60,11 @@ const voiceAddTaskBtn = document.getElementById('voice-add-btn');
 const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
 const aiSuggestionBox = document.getElementById('ai-suggestion-box');
 const modeToggle = document.getElementById('mode-toggle-checkbox');
+const badgeModal = document.getElementById('badge-modal');
+const badgeModalIcon = document.getElementById('badge-modal-icon');
+const badgeModalName = document.getElementById('badge-modal-name');
+const badgeModalOkBtn = document.getElementById('badge-modal-ok-btn');
+const resetAchievementsBtn = document.getElementById('reset-achievements-btn');
 
 // --- App State --- //
 let allTasks = [], currentUser = null, currentUserProfile = {};
@@ -77,6 +82,36 @@ let conversationCreationLocks = new Map();
 let isPostingComment = false;
 let activeListenerToken = null; 
 let lastCommentTime = 0; 
+const ALL_BADGES = [
+    {
+        id: 'first_strike',
+        name: 'First Strike',
+        description: 'Complete your very first task.',
+        icon: 'fa-solid fa-bolt',
+        condition: (tasks) => tasks.filter(t => t.status === 'completed').length >= 1
+    },
+    {
+        id: 'finisher_10',
+        name: 'Task Finisher',
+        description: 'Complete 10 tasks.',
+        icon: 'fa-solid fa-star',
+        condition: (tasks) => tasks.filter(t => t.status === 'completed').length >= 10
+    },
+    {
+        id: 'workaholic_10',
+        name: 'Workaholic',
+        description: 'Complete 10 "Work" tasks.',
+        icon: 'fa-solid fa-briefcase',
+        condition: (tasks) => tasks.filter(t => t.status === 'completed' && t.category === 'Work').length >= 10
+    },
+    {
+        id: 'night_owl',
+        name: 'Night Owl',
+        description: 'Complete a task after 10 PM.',
+        icon: 'fa-solid fa-moon',
+        condition: (tasks) => new Date().getHours() >= 22 // 10 PM or later
+    }
+];
 
 // --- File Upload State --- //
 const MAX_FILE_SIZE_MB = 10;
@@ -99,10 +134,19 @@ let datePicker, timePicker, dateFilterInstance;
 
 // --- Page & UI Management --- //
 const showPage = (pageId) => {
-    [signinPage, signupPage, todoPage, profilePage].forEach(page => page.classList.add('hide'));
+    // Find analyticsPage here, only when it's needed.
+    const analyticsPage = document.getElementById('analytics-page'); 
+
+    // Use a filter to remove any pages that might not exist yet.
+    [signinPage, signupPage, todoPage, profilePage, analyticsPage]
+        .filter(page => page) // This ensures we don't try to access a null element
+        .forEach(page => page.classList.add('hide'));
+
     document.getElementById(pageId).classList.remove('hide');
-    backBtn.classList.toggle('hide', pageId !== 'profile-page');
-    logo.classList.toggle('hide', pageId === 'profile-page');
+    
+    const isSubPage = pageId === 'profile-page' || pageId === 'analytics-page';
+    backBtn.classList.toggle('hide', !isSubPage);
+    logo.classList.toggle('hide', isSubPage);
 };
 
 const showFeedback = (element, message, type) => {
@@ -187,10 +231,24 @@ const listenForProfile = () => {
 const listenForTasks = () => {
     if (!currentUser) return;
     if (unsubscribeTasks) unsubscribeTasks();
+
+    let isFirstLoad = true; // Prevents achievements from firing on initial page load
+
     unsubscribeTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('createdAt', 'desc')
         .onSnapshot(snapshot => {
+            const oldCompletedCount = isFirstLoad ? 0 : allTasks.filter(t => t.status === 'completed').length;
+            
             allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            const newCompletedCount = allTasks.filter(t => t.status === 'completed').length;
+
+            // If a task was just completed (and it's not the initial load), check for achievements
+            if (!isFirstLoad && newCompletedCount > oldCompletedCount) {
+                checkForAchievements();
+            }
+            
             renderAll();
+            isFirstLoad = false; // Set to false after the first run
         });
 };
 
@@ -458,9 +516,105 @@ const updateTaskCounters = () => {
     const total = allTasks.length;
     const completed = allTasks.filter(t => t.status === 'completed').length;
     const pending = total - completed;
+
+    // Calculate the productivity score
+    const score = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    // Update the DOM elements
     if (statTotal) statTotal.textContent = total;
     if (statCompleted) statCompleted.textContent = completed;
     if (statPending) statPending.textContent = pending;
+
+    // Find and update the new score element
+    const statScore = document.getElementById('stat-score');
+    if (statScore) statScore.textContent = `${score}%`;
+};
+
+const renderAnalytics = () => {
+    // 1. Get the DOM elements for the report numbers
+    const dailyCountEl = document.getElementById('daily-completed-count');
+    const weeklyCountEl = document.getElementById('weekly-completed-count');
+
+    // 2. Define the date ranges
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Today at 00:00
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(todayStart.getDate() - todayStart.getDay()); // Start of the current week (Sunday)
+
+    // 3. Filter the tasks based on their 'completedAt' timestamp
+    const tasksCompletedToday = allTasks.filter(task => 
+        task.completedAt && task.completedAt.toDate() >= todayStart
+    );
+    
+    const tasksCompletedThisWeek = allTasks.filter(task => 
+        task.completedAt && task.completedAt.toDate() >= weekStart
+    );
+
+    // 4. Update the HTML with the calculated counts
+    if (dailyCountEl) {
+        dailyCountEl.textContent = tasksCompletedToday.length;
+    }
+    if (weeklyCountEl) {
+        weeklyCountEl.textContent = tasksCompletedThisWeek.length;
+    }
+};
+
+const renderBadges = () => {
+    const container = document.getElementById('achievements-container');
+    if (!container) return;
+
+    // For existing users, unlockedBadges might not exist, so default to an empty array.
+    const unlockedBadges = currentUserProfile.unlockedBadges || [];
+    
+    container.innerHTML = ''; // Clear existing badges
+    ALL_BADGES.forEach(badge => {
+        const isUnlocked = unlockedBadges.includes(badge.id);
+        const badgeEl = document.createElement('div');
+        badgeEl.className = `badge ${isUnlocked ? 'unlocked' : ''}`;
+        
+        badgeEl.innerHTML = `
+            <i class="fas ${badge.icon}"></i>
+            <h4>${badge.name}</h4>
+            <p>${badge.description}</p>
+        `;
+        container.appendChild(badgeEl);
+    });
+};
+
+const checkForAchievements = () => {
+    const unlockedBadges = currentUserProfile.unlockedBadges || [];
+    
+    const newlyUnlockedBadges = ALL_BADGES.filter(badge => 
+        !unlockedBadges.includes(badge.id) && badge.condition(allTasks)
+    );
+
+    if (newlyUnlockedBadges.length > 0) {
+    newlyUnlockedBadges.forEach(badge => {
+        // Show the new achievement pop-up modal
+        showAchievementModal(badge);
+        
+        // Add the new badge to the user's profile in Firestore
+        const userRef = db.collection('users').doc(currentUser.uid);
+        userRef.update({
+            unlockedBadges: firebase.firestore.FieldValue.arrayUnion(badge.id)
+            });
+        });
+    }
+}
+
+const showAchievementModal = (badge) => {
+    if (!badgeModal) return;
+    
+    // Populate the modal with the specific badge info
+    badgeModalIcon.className = `fas ${badge.icon}`;
+    badgeModalName.textContent = badge.name;
+    
+    // Show the modal
+    badgeModal.classList.remove('hide');
+};
+
+const hideAchievementModal = () => {
+    if (badgeModal) badgeModal.classList.add('hide');
 };
 
 // --- Modal Functions --- //
@@ -1298,7 +1452,23 @@ document.addEventListener('DOMContentLoaded', () => {
     logo?.addEventListener('click', () => { if (currentUser) showPage('todo-page'); });
     signinLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
     signupLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
-    profileLink?.addEventListener('click', (e) => { e.preventDefault(); showPage('profile-page'); profileDropdown.classList.remove('show'); });
+    profileLink?.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        renderBadges(); 
+        showPage('profile-page'); 
+        profileDropdown.classList.remove('show'); 
+    });
+
+    const analyticsLink = document.getElementById('analytics-link');
+    analyticsLink?.addEventListener('click', (e) => {
+        e.preventDefault();
+        renderAnalytics();
+        showPage('analytics-page');
+        profileDropdown.classList.remove('show');
+    });
+
+    // Moved this to the correct place so it always works
+    badgeModalOkBtn?.addEventListener('click', hideAchievementModal);
     showSignup?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
     showSignin?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
     logoutBtn?.addEventListener('click', () => auth.signOut());
@@ -1314,7 +1484,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 displayName: userEmail.split('@')[0],
                 email: userEmail.toLowerCase(),
                 photoURL: 'https://placehold.co/100x100/d4a373/fefae0?text=User',
-                preferences: userPreferences
+                preferences: userPreferences,
+                unlockedBadges: []
             }))
             .catch(error => showFeedback(signupFeedback, error.message, 'error'));
     });
@@ -1559,24 +1730,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const newStatus = isChecked ? 'completed' : 'todo';
-            taskRef.update({ status: newStatus });
-            
+            const oldStatus = task.status; // Capture the old status for logging
+
+            const updateData = {
+                status: newStatus,
+                completedAt: isChecked ? firebase.firestore.FieldValue.serverTimestamp() : null
+            };
+            taskRef.update(updateData);
+    
+            // The achievement check has been removed from here.
+            // We also fix a minor logging bug by using our captured oldStatus.
             let conversationId = task.conversationId || await createConversationForTask(taskId);
             if (conversationId) {
-                 addUpdateLog(conversationId, 'status', { oldValue: task.status, newValue: newStatus });
+                addUpdateLog(conversationId, 'status', { oldValue: oldStatus, newValue: newStatus });
             }
 
             if (isChecked && task.assignedBy && task.originalTaskId && task.originalAssignerUid) {
                 const originalTaskRef = db.collection('users').doc(task.originalAssignerUid).collection('tasks').doc(task.originalTaskId);
-                originalTaskRef.get().then(doc => {
-                    if (doc.exists && doc.data().conversationId) {
+                    originalTaskRef.get().then(doc => {
+                        if (doc.exists && doc.data().conversationId) {
                         addUpdateLog(doc.data().conversationId, 'assigned_completed', {});
-                    }
-                });
-                originalTaskRef.update({
-                    'assignedTo.status': 'completed',
-                    'assignedTo.completedAt': firebase.firestore.FieldValue.serverTimestamp()
-                }).catch(err => console.error("Error updating original assigned task:", err));
+                        }
+                    });
+                    originalTaskRef.update({
+                        'assignedTo.status': 'completed',
+                        'assignedTo.completedAt': firebase.firestore.FieldValue.serverTimestamp()
+                    }).catch(err => console.error("Error updating original assigned task:", err));
             }
         } else if (e.target.closest('.delete-btn')) {
             taskRef.delete();
@@ -1639,4 +1818,36 @@ document.addEventListener('DOMContentLoaded', () => {
             listenForTasks();
         }
     });
+    resetAchievementsBtn?.addEventListener('click', handleResetAchievements);
 });
+/**
+ * Handles the achievement reset process.
+ */
+const handleResetAchievements = async () => {
+    if (!currentUser) return;
+
+    // 1. Confirm the action with the user to prevent mistakes.
+    if (!confirm("Are you sure you want to reset all your achievements? This action cannot be undone.")) {
+        return;
+    }
+
+    try {
+        // 2. Update the user's document in Firestore, setting unlockedBadges to an empty array.
+        const userRef = db.collection('users').doc(currentUser.uid);
+        await userRef.update({
+            unlockedBadges: []
+        });
+
+        // 3. Immediately update the local profile object and re-render the badges on the screen.
+        if (currentUserProfile) {
+            currentUserProfile.unlockedBadges = [];
+        }
+        renderBadges();
+
+        showFeedback(profileFeedback, "Achievements reset successfully!", "success");
+
+    } catch (error) {
+        console.error("Error resetting achievements:", error);
+        showFeedback(profileFeedback, "Failed to reset achievements. Please try again.", "error");
+    }
+};
