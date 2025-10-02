@@ -166,6 +166,7 @@ const showFeedback = (element, message, type) => {
 const updateUIforLoginState = (user) => {
     currentUser = user;
     if (user) {
+        runTaskOrderMigration();
         [signinLink, signupLink].forEach(el => el.classList.add('hide'));
         profileMenu.classList.remove('hide');
         showPage('todo-page');
@@ -186,14 +187,12 @@ const updateUIforLoginState = (user) => {
 };
 
 const applyUserPreferences = (prefs = {}) => {
-    // FIX 1: Added 'palette' to the defaults to ensure it's always present.
     userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly', palette: 'default', ...prefs };
     calendarMode = userPreferences.calendarDefault;
 
     // Apply theme and palette
     document.body.classList.toggle('dark-theme', userPreferences.theme === 'dark');
     
-    // FIX 2: This line was missing. It applies the chosen palette to the body element.
     document.body.dataset.palette = userPreferences.palette || 'default';
 
     if(themeToggle) themeToggle.checked = userPreferences.theme === 'dark';
@@ -270,6 +269,51 @@ const listenForTasks = () => {
             renderAll();
             isFirstLoad = false; // Set to false after the first run
         });
+};
+
+const runTaskOrderMigration = async () => {
+    if (!currentUser) return;
+
+    // 1. Check if migration has already been completed for this user.
+    const userPrefRef = db.collection('users').doc(currentUser.uid);
+    const userDoc = await userPrefRef.get();
+    if (userDoc.exists && userDoc.data().preferences?.dataMigrationV1Complete) {
+        // console.log("Migration already completed for this user. Skipping.");
+        return;
+    }
+
+    console.log("Running one-time task migration for user:", currentUser.uid);
+
+    // 2. Find all tasks without an 'order' field.
+    const tasksRef = userPrefRef.collection('tasks');
+    const snapshot = await tasksRef.get();
+
+    const tasksToUpdate = [];
+    snapshot.forEach(doc => {
+        if (!doc.data().hasOwnProperty('order')) {
+            tasksToUpdate.push(doc);
+        }
+    });
+
+    if (tasksToUpdate.length === 0) {
+        console.log("No tasks needed migration.");
+    } else {
+        // 3. Update the tasks in a batch.
+        const batch = db.batch();
+        tasksToUpdate.forEach(doc => {
+            const taskData = doc.data();
+            const orderValue = taskData.createdAt ? taskData.createdAt.toMillis() : Date.now();
+            batch.update(doc.ref, { order: orderValue });
+        });
+        await batch.commit();
+        console.log(`Successfully migrated ${tasksToUpdate.length} tasks.`);
+    }
+
+    // 4. Set the flag so this migration doesn't run again for this user.
+    await userPrefRef.update({
+        'preferences.dataMigrationV1Complete': true
+    });
+    console.log("Migration flag set. Process complete.");
 };
 
 // --- Main Render Functions --- //
