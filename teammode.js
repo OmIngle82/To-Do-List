@@ -70,24 +70,10 @@ function handleStartTeamMode() {
 function listenForTeamTasks() {
     if (!currentUser) return;
     if (unsubscribeTeamTasks) unsubscribeTeamTasks();
-
-    let isFirstLoad = true; // Prevents achievements from firing on initial load
-
-    unsubscribeTeamTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('createdAt', 'desc')
+    unsubscribeTeamTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('order', 'asc')
         .onSnapshot(snapshot => {
-            // Logic copied from the simple mode listener to ensure achievements work here too.
-            const oldCompletedCount = isFirstLoad ? 0 : allTasks.filter(t => t.status === 'completed').length;
-            
             allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            const newCompletedCount = allTasks.filter(t => t.status === 'completed').length;
-
-            if (!isFirstLoad && newCompletedCount > oldCompletedCount) {
-                checkForAchievements();
-            }
-            
             renderAll();
-            isFirstLoad = false;
         });
 }
 

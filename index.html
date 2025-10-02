@@ -91,6 +91,14 @@
                             <label>Accent Color</label>
                             <div id="accent-color-picker" class="color-picker"></div>
                         </div>
+                        <div class="form-group">
+                            <label>Color Palette</label>
+                            <div id="palette-switcher" class="layout-switcher">
+                                <label><input type="radio" name="palette" value="default" checked> Default</label>
+                                <label><input type="radio" name="palette" value="ocean"> Ocean</label>
+                                <label><input type="radio" name="palette" value="sakura"> Sakura</label>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="settings-section">
@@ -346,9 +354,12 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-storage-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-messaging-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <script src="script.js"></script>
     <script src="ai-suggestions.js"></script>
     <script src="teammode.js"></script>
     <script src="voice-feature.js"></script>
+
+    <div id="offline-indicator" class="offline-indicator hide">You are currently offline. Changes will sync when you reconnect.</div>
 </body>
 </html>

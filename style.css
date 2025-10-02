@@ -14,7 +14,149 @@
     }
 }
 
-/* Light Theme Variables */
+/* --- NEW PALETTE-BASED THEMING --- */
+
+/* Palette 1: Default (Original Theme) */
+body[data-palette="default"] {
+    --bg-color: #e9edc9;
+    --app-bg: #fefae0;
+    --header-bg: #d4a373;
+    --text-color: #5c4033;
+    --text-light: #fefae0;
+    --completed-color: #9b9b9b;
+    --error-color: #c1121f;
+    --success-color: #2a9d8f;
+    --box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    --border-color: #faedcd;
+    --task-item-bg: #faedcd;
+    --task-item-completed-bg: #f5f5f5;
+    --priority-high: #f07167;
+    --priority-medium: #ffb703;
+    --priority-low: #84a59d;
+    --standout-color: #2a9d8f;
+    --standout-hover: #248a7f;
+    --glow-color: #f07167;
+    --team-color: #00afb9;
+    --assign-color: #9d4edd;
+}
+
+body.dark-theme[data-palette="default"] {
+    --bg-color: #10002b;
+    --app-bg: #240046;
+    --header-bg: #3c096c;
+    --text-color: #e0aaff;
+    --text-light: #e0aaff;
+    --completed-color: #7b7b7b;
+    --error-color: #ff4d6d;
+    --success-color: #52b788;
+    --box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    --border-color: #5a189a;
+    --task-item-bg: #3c096c;
+    --task-item-completed-bg: #2c0b4e;
+    --priority-high: #ff4d6d;
+    --priority-medium: #c77dff;
+    --priority-low: #5a189a;
+    --standout-color: #52b788;
+    --standout-hover: #47a177;
+    --glow-color: #ff4d6d;
+    --team-color: #ade8f4;
+    --assign-color: #c77dff;
+}
+
+/* Palette 2: Ocean */
+body[data-palette="ocean"] {
+    --bg-color: #e0f4fb;
+    --app-bg: #f0f8ff;
+    --header-bg: #219ebc;
+    --text-color: #023047;
+    --text-light: #ffffff;
+    --completed-color: #7aa3b0;
+    --error-color: #d00000;
+    --success-color: #2a9d8f;
+    --box-shadow: 0 4px 15px rgba(2, 48, 71, 0.1);
+    --border-color: #8ecae6;
+    --task-item-bg: #ffffff;
+    --task-item-completed-bg: #eef3f5;
+    --priority-high: #fb8500;
+    --priority-medium: #ffb703;
+    --priority-low: #219ebc;
+    --standout-color: #fb8500;
+    --standout-hover: #e27700;
+    --glow-color: #fb8500;
+    --team-color: #219ebc;
+    --assign-color: #1d3557;
+}
+
+body.dark-theme[data-palette="ocean"] {
+    --bg-color: #011d27;
+    --app-bg: #023047;
+    --header-bg: #033e59;
+    --text-color: #ade8f4;
+    --text-light: #ffffff;
+    --completed-color: #5a7d8a;
+    --error-color: #ff6b6b;
+    --success-color: #52b788;
+    --box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    --border-color: #10597d;
+    --task-item-bg: #033e59;
+    --task-item-completed-bg: #023852;
+    --priority-high: #fb8500;
+    --priority-medium: #ffb703;
+    --priority-low: #219ebc;
+    --standout-color: #ffb703;
+    --standout-hover: #e2a203;
+    --glow-color: #ffb703;
+    --team-color: #8ecae6;
+    --assign-color: #a8dadc;
+}
+
+/* Palette 3: Sakura */
+body[data-palette="sakura"] {
+    --bg-color: #d8e2dc;
+    --app-bg: #ffe5d9;
+    --header-bg: #f4acb7;
+    --text-color: #8c7178;
+    --text-light: #ffffff;
+    --completed-color: #b5a5a9;
+    --error-color: #d90429;
+    --success-color: #6a994e;
+    --box-shadow: 0 4px 15px rgba(157, 129, 137, 0.15);
+    --border-color: #ffcad4;
+    --task-item-bg: #fff0f3;
+    --task-item-completed-bg: #f5e9eb;
+    --priority-high: #ef476f;
+    --priority-medium: #f4acb7;
+    --priority-low: #9d8189;
+    --standout-color: #ef476f;
+    --standout-hover: #d83d63;
+    --glow-color: #ef476f;
+    --team-color: #f4acb7;
+    --assign-color: #9d8189;
+}
+
+body.dark-theme[data-palette="sakura"] {
+    --bg-color: #2c2527;
+    --app-bg: #4a3e41;
+    --header-bg: #6e5a60;
+    --text-color: #ffe5d9;
+    --text-light: #ffffff;
+    --completed-color: #8c7f82;
+    --error-color: #ff758f;
+    --success-color: #a7c957;
+    --box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    --border-color: #8c7178;
+    --task-item-bg: #6e5a60;
+    --task-item-completed-bg: #5d4d52;
+    --priority-high: #ff758f;
+    --priority-medium: #f4acb7;
+    --priority-low: #bca8ae;
+    --standout-color: #f4acb7;
+    --standout-hover: #e298a4;
+    --glow-color: #ff758f;
+    --team-color: #ffcad4;
+    --assign-color: #d8e2dc;
+}
+
 :root {
     --bg-color: #e9edc9;
     --app-bg: #fefae0;
@@ -37,33 +179,7 @@
     --standout-hover: #248a7f;
     --glow-color: #f07167;
     --team-color: #00afb9;
-    --assign-color: #9d4edd; /* New color for assignments */
-}
-
-/* Dark Theme Variables */
-body.dark-theme {
-    --bg-color: #10002b;
-    --app-bg: #240046;
-    --header-bg: #3c096c;
-    --primary-color: #9d4edd;
-    --primary-hover: #7b2cbf;
-    --text-color: #e0aaff;
-    --text-light: #e0aaff;
-    --completed-color: #7b7b7b;
-    --error-color: #ff4d6d;
-    --success-color: #52b788;
-    --box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    --border-color: #5a189a;
-    --task-item-bg: #3c096c;
-    --task-item-completed-bg: #2c0b4e;
-    --priority-high: #ff4d6d;
-    --priority-medium: #c77dff;
-    --priority-low: #5a189a;
-    --standout-color: #52b788;
-    --standout-hover: #47a177;
-    --glow-color: #ff4d6d;
-    --team-color: #ade8f4;
-    --assign-color: #c77dff; /* New color for assignments in dark mode */
+    --assign-color: #9d4edd;
 }
 
 /* Basic Reset */
@@ -889,4 +1005,24 @@ body.team-mode .simple-mode-only {
 .danger-btn:hover {
     background-color: var(--error-color);
     color: var(--text-light);
+}
+
+/* --- Offline Indicator --- */
+.offline-indicator {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px 8px 0 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    z-index: 200;
+    transition: transform 0.3s ease;
+}
+
+.offline-indicator.hide {
+    transform: translateX(-50%) translateY(100%);
 }

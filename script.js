@@ -13,6 +13,14 @@ const firebaseConfig = {
 const app = firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+db.enablePersistence()
+  .catch((err) => {
+      if (err.code == 'failed-precondition') {
+          console.warn("Firestore persistence failed: multiple tabs open.");
+      } else if (err.code == 'unimplemented') {
+          console.warn("Firestore persistence failed: browser not supported.");
+      }
+  })
 const storage = firebase.storage();
 const messaging = firebase.messaging();
 
@@ -68,7 +76,7 @@ const resetAchievementsBtn = document.getElementById('reset-achievements-btn');
 
 // --- App State --- //
 let allTasks = [], currentUser = null, currentUserProfile = {};
-let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly' };
+let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly', palette: 'default' };
 let currentStatusFilter = 'all', currentCategoryFilter = 'all', currentPriorityFilter = 'all', currentSearchTerm = '';
 let selectedDateFilter = null;
 let editingTaskId = null, detailTaskId = null;
@@ -178,13 +186,25 @@ const updateUIforLoginState = (user) => {
 };
 
 const applyUserPreferences = (prefs = {}) => {
-    userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly', ...prefs };
+    // FIX 1: Added 'palette' to the defaults to ensure it's always present.
+    userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly', palette: 'default', ...prefs };
     calendarMode = userPreferences.calendarDefault;
+
+    // Apply theme and palette
     document.body.classList.toggle('dark-theme', userPreferences.theme === 'dark');
+    
+    // FIX 2: This line was missing. It applies the chosen palette to the body element.
+    document.body.dataset.palette = userPreferences.palette || 'default';
+
     if(themeToggle) themeToggle.checked = userPreferences.theme === 'dark';
 
+    // Check the correct radio buttons
     document.querySelectorAll('input[name="layout"]').forEach(input => {
         if(input.value === userPreferences.layout) input.checked = true;
+    });
+    
+    document.querySelectorAll('input[name="palette"]').forEach(input => {
+        if(input.value === (userPreferences.palette || 'default')) input.checked = true;
     });
 
     document.querySelectorAll('input[name="calendar-default"]').forEach(input => {
@@ -234,7 +254,7 @@ const listenForTasks = () => {
 
     let isFirstLoad = true; // Prevents achievements from firing on initial page load
 
-    unsubscribeTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('createdAt', 'desc')
+    unsubscribeTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('order', 'asc')
         .onSnapshot(snapshot => {
             const oldCompletedCount = isFirstLoad ? 0 : allTasks.filter(t => t.status === 'completed').length;
             
@@ -349,6 +369,29 @@ const renderListView = () => {
     if (typeof toggleSelectionCheckboxesVisibility === 'function' && typeof currentTeamAction !== 'undefined' && currentTeamAction) {
         toggleSelectionCheckboxesVisibility(true, currentTeamAction);
     }
+
+    new Sortable(taskListView, {
+        animation: 150,
+        handle: '.task-content', // This makes the main content area the drag handle
+        onEnd: (evt) => {
+            const taskId = evt.item.dataset.id;
+            const prevTaskElement = evt.item.previousElementSibling;
+            const nextTaskElement = evt.item.nextElementSibling;
+
+            // Find the corresponding tasks in our local 'allTasks' array
+            const prevTask = prevTaskElement ? allTasks.find(t => t.id === prevTaskElement.dataset.id) : null;
+            const nextTask = nextTaskElement ? allTasks.find(t => t.id === nextTaskElement.dataset.id) : null;
+
+            // Calculate the new order value
+            const prevOrder = prevTask ? prevTask.order : 0;
+            const nextOrder = nextTask ? nextTask.order : Date.now() + 2000; // Add buffer for items dropped at the end
+
+            const newOrder = (prevOrder + nextOrder) / 2;
+
+            // Update the task's order in Firestore
+            db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ order: newOrder });
+        }
+    });
 };
 
 
@@ -378,32 +421,45 @@ const renderBoardView = () => {
         card.className = 'task-card-board';
         card.dataset.id = task.id;
         card.dataset.priority = task.priority || 'low';
-        card.draggable = true;
         card.innerHTML = `<h4>${task.text}</h4><p>${task.category || ''}</p>`;
         const container = containers[task.status || 'todo'];
         if (container) container.appendChild(card);
     });
-
-    taskBoardView.querySelectorAll('.task-card-board').forEach(card => {
-        card.addEventListener('dragstart', e => {
-            e.target.classList.add('dragging');
-            e.dataTransfer.setData('text/plain', e.target.dataset.id);
-        });
-        card.addEventListener('dragend', e => e.target.classList.remove('dragging'));
-    });
+    
+    // NEW SortableJS implementation for all columns
     taskBoardView.querySelectorAll('.task-cards').forEach(column => {
-        column.addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); });
-        column.addEventListener('dragleave', e => e.currentTarget.classList.remove('drag-over'));
-        column.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            e.currentTarget.classList.remove('drag-over');
-            const taskId = e.dataTransfer.getData('text/plain');
-            const newStatus = e.currentTarget.dataset.status;
-            const task = allTasks.find(t => t.id === taskId);
-            if (task && task.status !== newStatus) {
-                db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ status: newStatus });
-                let conversationId = task.conversationId || await createConversationForTask(taskId);
-                if(conversationId) addUpdateLog(conversationId, 'status', { oldValue: task.status, newValue: newStatus });
+        new Sortable(column, {
+            group: 'board-tasks', // This allows dragging cards between columns
+            animation: 150,
+            onEnd: async (evt) => {
+                const taskId = evt.item.dataset.id;
+                const newStatus = evt.to.dataset.status;
+                const oldStatus = evt.from.dataset.status;
+
+                const prevTaskElement = evt.item.previousElementSibling;
+                const nextTaskElement = evt.item.nextElementSibling;
+                
+                const prevTask = prevTaskElement ? allTasks.find(t => t.id === prevTaskElement.dataset.id) : null;
+                const nextTask = nextTaskElement ? allTasks.find(t => t.id === nextTaskElement.dataset.id) : null;
+                
+                const prevOrder = prevTask ? prevTask.order : 0;
+                const nextOrder = nextTask ? nextTask.order : Date.now() + 2000;
+                
+                const newOrder = (prevOrder + nextOrder) / 2;
+
+                // Update both order and status in a single operation
+                const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
+                await taskRef.update({ 
+                    order: newOrder,
+                    status: newStatus 
+                });
+
+                // If status changed, log the update
+                if (newStatus !== oldStatus) {
+                    const task = allTasks.find(t => t.id === taskId);
+                    let conversationId = task.conversationId || await createConversationForTask(taskId);
+                    if (conversationId) addUpdateLog(conversationId, 'status', { oldValue: oldStatus, newValue: newStatus });
+                }
             }
         });
     });
@@ -1467,7 +1523,6 @@ document.addEventListener('DOMContentLoaded', () => {
         profileDropdown.classList.remove('show');
     });
 
-    // Moved this to the correct place so it always works
     badgeModalOkBtn?.addEventListener('click', hideAchievementModal);
     showSignup?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
     showSignin?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
@@ -1645,6 +1700,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 taskData.attachments = newAttachments;
                 taskData.conversationId = conversationId;
                 taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                taskData.order = Date.now();
 
                 await taskRef.doc(tempTaskId).set(taskData);
                 await addUpdateLog(conversationId, 'created', { text: taskData.text });
@@ -1818,36 +1874,53 @@ document.addEventListener('DOMContentLoaded', () => {
             listenForTasks();
         }
     });
+
+    const paletteSwitcher = document.getElementById('palette-switcher');
+    paletteSwitcher?.addEventListener('change', e => {
+        if (e.target.matches('input[name="palette"]')) {
+            userPreferences.palette = e.target.value;
+            applyUserPreferences(userPreferences);
+        }
+    });
+
+   
+    const offlineIndicator = document.getElementById('offline-indicator');
+    if (offlineIndicator) {
+        const updateOnlineStatus = () => {
+            offlineIndicator.classList.toggle('hide', navigator.onLine);
+        };
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus); 
+        updateOnlineStatus(); // Set initial status
+    }
+    /**
+     * Handles the achievement reset process.
+     */
+    const handleResetAchievements = async () => {
+        if (!currentUser) return;
+
+        if (!confirm("Are you sure you want to reset all your achievements? This action cannot be undone.")) {
+            return;
+        }
+
+        try {
+            const userRef = db.collection('users').doc(currentUser.uid);
+            await userRef.update({
+                unlockedBadges: []
+            });
+
+            if (currentUserProfile) {
+                currentUserProfile.unlockedBadges = [];
+            }
+            renderBadges();
+
+            showFeedback(profileFeedback, "Achievements reset successfully!", "success");
+
+        } catch (error) {
+            console.error("Error resetting achievements:", error);
+            showFeedback(profileFeedback, "Failed to reset achievements. Please try again.", "error");
+        }
+    };
+
     resetAchievementsBtn?.addEventListener('click', handleResetAchievements);
 });
-/**
- * Handles the achievement reset process.
- */
-const handleResetAchievements = async () => {
-    if (!currentUser) return;
-
-    // 1. Confirm the action with the user to prevent mistakes.
-    if (!confirm("Are you sure you want to reset all your achievements? This action cannot be undone.")) {
-        return;
-    }
-
-    try {
-        // 2. Update the user's document in Firestore, setting unlockedBadges to an empty array.
-        const userRef = db.collection('users').doc(currentUser.uid);
-        await userRef.update({
-            unlockedBadges: []
-        });
-
-        // 3. Immediately update the local profile object and re-render the badges on the screen.
-        if (currentUserProfile) {
-            currentUserProfile.unlockedBadges = [];
-        }
-        renderBadges();
-
-        showFeedback(profileFeedback, "Achievements reset successfully!", "success");
-
-    } catch (error) {
-        console.error("Error resetting achievements:", error);
-        showFeedback(profileFeedback, "Failed to reset achievements. Please try again.", "error");
-    }
-};
