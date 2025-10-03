@@ -114,6 +114,9 @@
                     <div class="settings-section">
                         <h3>Smart Features</h3>
                         <button type="button" id="enable-notifications-btn" class="settings-btn">Enable Reminders</button>
+                        <button type="button" id="connect-google-calendar-btn" class="settings-btn" style="margin-left: 10px;">
+                            <i class="fab fa-google" style="margin-right: 8px;"></i>Connect Google Calendar
+                        </button>
                     </div>
                     <div class="settings-section">
                         <div class="settings-section-header">
@@ -253,15 +256,17 @@
                     <input type="file" id="task-attachments-input" multiple>
                     <div id="attachments-list-modal" class="attachments-list-preview"></div>
                 </div>
+                
+                <div class="form-group hide" id="google-calendar-sync-container">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="google-calendar-sync-checkbox">
+                        Sync to Google Calendar
+                    </label>
+                </div>
 
                 <div id="upload-debug-panel" class="debug-panel" style="display: none;">
-                    <h4>Upload Debug Information</h4>
-                    <div id="auth-status">Authentication: <span id="auth-status-text">Checking...</span></div>
-                    <div id="storage-path">Storage Path: <span id="storage-path-text">Not determined</span></div>
-                    <div id="conversation-status">Conversation: <span id="conversation-status-text">Checking...</span></div>
-                    <div id="permission-test">Permissions: <span id="permission-test-text">Not tested</span></div>
                 </div>
-                
+
                 <div class="modal-actions">
                     <button type="button" id="modal-cancel-btn" class="modal-btn cancel-btn">Cancel</button>
                     <button type="button" id="modal-save-btn" class="modal-btn save-btn">Save Task</button>

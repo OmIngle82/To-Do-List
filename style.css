@@ -1026,3 +1026,17 @@ body.team-mode .simple-mode-only {
 .offline-indicator.hide {
     transform: translateX(-50%) translateY(100%);
 }
+
+/* --- Google Calendar Checkbox --- */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+.checkbox-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--primary-color);
+}

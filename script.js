@@ -73,6 +73,7 @@ const badgeModalIcon = document.getElementById('badge-modal-icon');
 const badgeModalName = document.getElementById('badge-modal-name');
 const badgeModalOkBtn = document.getElementById('badge-modal-ok-btn');
 const resetAchievementsBtn = document.getElementById('reset-achievements-btn');
+const connectGoogleCalendarBtn = document.getElementById('connect-google-calendar-btn');
 
 // --- App State --- //
 let allTasks = [], currentUser = null, currentUserProfile = {};
@@ -314,6 +315,99 @@ const runTaskOrderMigration = async () => {
         'preferences.dataMigrationV1Complete': true
     });
     console.log("Migration flag set. Process complete.");
+};
+
+const syncTaskToGoogleCalendar = async (taskData) => {
+    // 1. Check for deadline
+    if (!taskData.deadline) {
+        showFeedback(profileFeedback, "Task needs a deadline to be synced.", "error");
+        return null;
+    }
+
+    // 2. Prepare event times
+    const startTime = taskData.deadline.toDate();
+    const endTime = new Date(startTime.getTime() + 30 * 60000); // 30 min duration
+
+    // 3. Authenticate and get token
+    try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/calendar.events');
+        const result = await auth.signInWithPopup(provider);
+        const accessToken = result.credential.accessToken;
+
+        // 4. Prepare event data for API
+        const event = {
+            'summary': taskData.text,
+            'description': 'Task created from Task Manager App.',
+            'start': {
+                'dateTime': startTime.toISOString(),
+                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone,
+            },
+            'end': {
+                'dateTime': endTime.toISOString(),
+                'timeZone': Intl.DateTimeFormat().resolvedOptions().timeZone,
+            },
+        };
+
+        // 5. Make the API call
+        const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(event)
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error.message);
+        }
+
+        console.log('Event created:', data);
+        showFeedback(profileFeedback, "Task successfully synced to Google Calendar!", "success");
+        return data.id; // Return the new event's ID
+
+    } catch (error) {
+        console.error('Error syncing to Google Calendar:', error);
+        showFeedback(profileFeedback, `Sync Failed: ${error.message}`, "error");
+        return null;
+    }
+};
+
+const deleteGoogleCalendarEvent = async (eventId) => {
+    if (!eventId) return;
+
+    console.log(`Attempting to delete Google Calendar event: ${eventId}`);
+
+    try {
+        // 1. Authenticate to get a fresh Access Token
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/calendar.events');
+        const result = await auth.signInWithPopup(provider);
+        const accessToken = result.credential.accessToken;
+
+        // 2. Make the API call to DELETE the event
+        const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        if (response.status === 204) { // 204 No Content is a successful deletion
+            console.log("Successfully deleted event from Google Calendar.");
+            showFeedback(profileFeedback, "Event removed from Google Calendar.", "success");
+        } else if (response.status === 410) { // 410 Gone means it was already deleted
+             console.log("Event was already deleted from Google Calendar.");
+        } else {
+            const errorData = await response.json();
+            throw new Error(errorData.error.message);
+        }
+
+    } catch (error) {
+        console.error('Error deleting Google Calendar event:', error);
+        // We show feedback but don't block the app's task deletion
+        showFeedback(profileFeedback, `Could not remove event from calendar: ${error.message}`, "error");
+    }
 };
 
 // --- Main Render Functions --- //
@@ -720,6 +814,16 @@ const hideAchievementModal = () => {
 // --- Modal Functions --- //
 const openTaskModal = (task = null) => {
     if (!taskModal) return;
+
+    // UPDATE THIS LOGIC
+    const calendarSyncContainer = document.getElementById('google-calendar-sync-container');
+    if (calendarSyncContainer) {
+        const isCalendarLinked = currentUserProfile?.preferences?.googleCalendarLinked;
+        calendarSyncContainer.classList.toggle('hide', !isCalendarLinked);
+        // Uncheck the box every time the modal opens
+        document.getElementById('google-calendar-sync-checkbox').checked = false;
+    }
+
     taskForm.reset();
     subtaskList.innerHTML = '';
     attachmentsListModal.innerHTML = '';
@@ -1637,143 +1741,161 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     saveTaskBtn?.addEventListener('click', async () => {
-        if (!taskInput.value.trim()) return;
+    if (!taskInput.value.trim()) return;
+
+    const syncCheckbox = document.getElementById('google-calendar-sync-checkbox');
+    const debugPanel = document.getElementById('upload-debug-panel');
+    const updateDebug = (target, text, success) => {
+        const el = document.getElementById(target);
+        if(el) {
+            el.textContent = text;
+            el.className = success === null ? '' : (success ? 'success' : 'error');
+        }
+    };
+
+    if(debugPanel && filesToUpload.length > 0) debugPanel.style.display = 'block';
+
+    try {
+        updateDebug('auth-status-text', 'Authenticating...', null);
+        currentUser = await waitForAuthentication();
+        updateDebug('auth-status-text', 'Authenticated', true);
+    } catch (authError) {
+        updateDebug('auth-status-text', 'Failed', false);
+        console.error("Authentication failed:", authError);
+        showFeedback(profileFeedback, "Authentication failed. Please sign in again.", "error");
+        return;
+    }
+
+    saveTaskBtn.disabled = true;
+
+    const modalActions = taskModal.querySelector('.modal-actions');
+    let progressContainer = document.getElementById('overall-progress-container');
+    if (!progressContainer) {
+        progressContainer = document.createElement('div');
+        progressContainer.id = 'overall-progress-container';
+        progressContainer.className = 'overall-progress-container';
+        progressContainer.innerHTML = `
+            <span>Overall Progress:</span>
+            <div class="overall-progress-bar-background">
+                <div id="overall-progress-bar" class="overall-progress-bar" style="width: 0%;"></div>
+            </div>`;
+        modalActions.prepend(progressContainer);
+    }
+    progressContainer.style.display = 'none';
+
+    const updateOverallProgress = (transferred, total) => {
+        if (total > 0) {
+            const percentage = (transferred / total) * 100;
+            const progressBar = document.getElementById('overall-progress-bar');
+            if (progressBar) progressBar.style.width = `${percentage}%`;
+            if(progressContainer) progressContainer.style.display = 'block';
+        }
+    };
+
+    let category = categorySelect.value === 'custom' ? customCategoryInput.value.trim() || 'Uncategorized' : categorySelect.value;
+    const deadlineDateVal = datePicker.selectedDates[0];
+    const deadlineTimeVal = timePicker.selectedDates[0];
+    let deadline = null;
+    if (deadlineDateVal) {
+        deadline = new Date(deadlineDateVal);
+        if (deadlineTimeVal) {
+            deadline.setHours(deadlineTimeVal.getHours(), deadlineTimeVal.getMinutes(), 0, 0);
+        }
+    }
+    const subtasks = Array.from(subtaskList.querySelectorAll('.subtask-item input[type="text"]'))
+        .map(input => ({ text: input.value.trim(), completed: false }))
+        .filter(sub => sub.text);
+    const status = taskStatusSelect ? taskStatusSelect.value : 'todo';
+    let taskData = { text: taskInput.value.trim(), priority: prioritySelect.value, status: status, deadline: deadline ? firebase.firestore.Timestamp.fromDate(deadline) : null, category, subtasks };
+    const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks');
+    
+    let newAttachments = []; 
+    let conversationIdForCleanup = null;
+
+    try {
+        let conversationId;
+        let finalTaskId = editingTaskId; // Keep track of the task ID
+
+        if (editingTaskId) {
+             const originalTask = allTasks.find(t => t.id === editingTaskId);
+             if (!originalTask) throw new Error("Task to edit not found");
+             conversationId = originalTask.conversationId || await createConversationForTask(editingTaskId);
+        } else {
+             const convoRef = db.collection('task_conversations').doc();
+             conversationId = convoRef.id;
+             conversationIdForCleanup = conversationId;
+             updateDebug('conversation-status-text', 'Creating...', null);
+             await convoRef.set({ authorizedUsers: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+             await new Promise(res => setTimeout(res, 500)); 
+        }
         
-        const debugPanel = document.getElementById('upload-debug-panel');
-        const updateDebug = (target, text, success) => {
-            const el = document.getElementById(target);
-            if(el) {
-                el.textContent = text;
-                el.className = success === null ? '' : (success ? 'success' : 'error');
-            }
-        };
-
-        if(debugPanel && filesToUpload.length > 0) debugPanel.style.display = 'block';
-
-        try {
-            updateDebug('auth-status-text', 'Authenticating...', null);
-            currentUser = await waitForAuthentication();
-            updateDebug('auth-status-text', 'Authenticated', true);
-        } catch (authError) {
-            updateDebug('auth-status-text', 'Failed', false);
-            console.error("Authentication failed:", authError);
-            showFeedback(profileFeedback, "Authentication failed. Please sign in again.", "error");
-            return;
+        updateDebug('conversation-status-text', 'Verifying...', null);
+        const conversationVerified = await verifyConversationExists(conversationId);
+        if (!conversationVerified) {
+            updateDebug('conversation-status-text', 'Verification Failed', false);
+            throw new Error("Conversation could not be verified in time.");
         }
+        updateDebug('conversation-status-text', `Verified (${conversationId.substring(0,5)}...)`, true);
 
-        saveTaskBtn.disabled = true;
+        if (editingTaskId) {
+            newAttachments = await uploadFiles(conversationId, editingTaskId, updateUploadProgress, updateOverallProgress, updateDebug);
+            taskData.attachments = [...existingAttachments, ...newAttachments];
+            if (!allTasks.find(t=>t.id === editingTaskId).conversationId) taskData.conversationId = conversationId;
 
-        const modalActions = taskModal.querySelector('.modal-actions');
-        let progressContainer = document.getElementById('overall-progress-container');
-        if (!progressContainer) {
-            progressContainer = document.createElement('div');
-            progressContainer.id = 'overall-progress-container';
-            progressContainer.className = 'overall-progress-container';
-            progressContainer.innerHTML = `
-                <span>Overall Progress:</span>
-                <div class="overall-progress-bar-background">
-                    <div id="overall-progress-bar" class="overall-progress-bar" style="width: 0%;"></div>
-                </div>`;
-            modalActions.prepend(progressContainer);
-        }
-        progressContainer.style.display = 'none';
-
-        const updateOverallProgress = (transferred, total) => {
-            if (total > 0) {
-                const percentage = (transferred / total) * 100;
-                const progressBar = document.getElementById('overall-progress-bar');
-                if (progressBar) progressBar.style.width = `${percentage}%`;
-                if(progressContainer) progressContainer.style.display = 'block';
-            }
-        };
-
-        let category = categorySelect.value === 'custom' ? customCategoryInput.value.trim() || 'Uncategorized' : categorySelect.value;
-        const deadlineDateVal = datePicker.selectedDates[0];
-        const deadlineTimeVal = timePicker.selectedDates[0];
-        let deadline = null;
-        if (deadlineDateVal) {
-            deadline = new Date(deadlineDateVal);
-            if (deadlineTimeVal) {
-                deadline.setHours(deadlineTimeVal.getHours(), deadlineTimeVal.getMinutes(), 0, 0);
-            }
-        }
-        const subtasks = Array.from(subtaskList.querySelectorAll('.subtask-item input[type="text"]'))
-            .map(input => ({ text: input.value.trim(), completed: false }))
-            .filter(sub => sub.text);
-        const status = taskStatusSelect ? taskStatusSelect.value : 'todo';
-        let taskData = { text: taskInput.value.trim(), priority: prioritySelect.value, status: status, deadline: deadline ? firebase.firestore.Timestamp.fromDate(deadline) : null, category, subtasks };
-        const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks');
-        
-        let newAttachments = []; 
-        let conversationIdForCleanup = null;
-
-        try {
-            let conversationId;
-            if (editingTaskId) {
-                 const originalTask = allTasks.find(t => t.id === editingTaskId);
-                 if (!originalTask) throw new Error("Task to edit not found");
-                 conversationId = originalTask.conversationId || await createConversationForTask(editingTaskId);
-            } else {
-                 const convoRef = db.collection('task_conversations').doc();
-                 conversationId = convoRef.id;
-                 conversationIdForCleanup = conversationId;
-                 updateDebug('conversation-status-text', 'Creating...', null);
-                 await convoRef.set({ authorizedUsers: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-                 await new Promise(res => setTimeout(res, 500)); 
-            }
+            await taskRef.doc(editingTaskId).update(taskData);
+        } else {
+            const tempTaskId = taskRef.doc().id;
+            finalTaskId = tempTaskId; // The new task's ID
+            newAttachments = await uploadFiles(conversationId, tempTaskId, updateUploadProgress, updateOverallProgress, updateDebug);
             
-            updateDebug('conversation-status-text', 'Verifying...', null);
-            const conversationVerified = await verifyConversationExists(conversationId);
-            if (!conversationVerified) {
-                updateDebug('conversation-status-text', 'Verification Failed', false);
-                throw new Error("Conversation could not be verified in time.");
-            }
-            updateDebug('conversation-status-text', `Verified (${conversationId.substring(0,5)}...)`, true);
+            taskData.attachments = newAttachments;
+            taskData.conversationId = conversationId;
+            taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            taskData.order = Date.now();
 
-            if (editingTaskId) {
-                newAttachments = await uploadFiles(conversationId, editingTaskId, updateUploadProgress, updateOverallProgress, updateDebug);
-                taskData.attachments = [...existingAttachments, ...newAttachments];
-                if (!allTasks.find(t=>t.id === editingTaskId).conversationId) taskData.conversationId = conversationId;
-
-                await taskRef.doc(editingTaskId).update(taskData);
-                // Logging logic...
-            } else {
-                const tempTaskId = taskRef.doc().id;
-                newAttachments = await uploadFiles(conversationId, tempTaskId, updateUploadProgress, updateOverallProgress, updateDebug);
-                
-                taskData.attachments = newAttachments;
-                taskData.conversationId = conversationId;
-                taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-                taskData.order = Date.now();
-
-                await taskRef.doc(tempTaskId).set(taskData);
-                await addUpdateLog(conversationId, 'created', { text: taskData.text });
-            }
-            taskModal.classList.add('hide');
-        } catch (error) {
-            console.error("Error saving task:", error);
-            showFeedback(profileFeedback, "Error saving task. Check debug panel for details.", "error");
-
-            if (!editingTaskId && newAttachments.length > 0) {
-                console.log(`Cleaning up ${newAttachments.length} orphaned files...`);
-                await Promise.all(newAttachments.map(async (attachment) => {
-                    try { 
-                        await storage.refFromURL(attachment.url).delete(); 
-                        console.log(`Deleted: ${attachment.url}`);
-                    } 
-                    catch (e) { console.warn(`Failed to clean up orphaned file: ${attachment.url}`, e); }
-                }));
-                if(conversationIdForCleanup) {
-                    try {
-                        await db.collection('task_conversations').doc(conversationIdForCleanup).delete();
-                    } catch(e) { /* Fail silently */ }
-                }
-            }
-        } finally {
-            saveTaskBtn.disabled = false;
-            if(progressContainer) progressContainer.style.display = 'none';
+            await taskRef.doc(tempTaskId).set(taskData);
+            await addUpdateLog(conversationId, 'created', { text: taskData.text });
         }
-    });
+
+        // --- GOOGLE CALENDAR LOGIC STARTS HERE --- //
+        if (syncCheckbox && syncCheckbox.checked) {
+            taskData.id = finalTaskId; 
+            
+            const eventId = await syncTaskToGoogleCalendar(taskData);
+            
+            // If sync was successful, save the eventId back to the task in Firestore
+            if (eventId && finalTaskId) {
+                await taskRef.doc(finalTaskId).update({ googleCalendarEventId: eventId });
+            }
+        }
+        // --- GOOGLE CALENDAR LOGIC ENDS HERE --- //
+
+        taskModal.classList.add('hide');
+
+    } catch (error) {
+        console.error("Error saving task:", error);
+        showFeedback(profileFeedback, "Error saving task. Check debug panel for details.", "error");
+
+        if (!editingTaskId && newAttachments.length > 0) {
+            console.log(`Cleaning up ${newAttachments.length} orphaned files...`);
+            await Promise.all(newAttachments.map(async (attachment) => {
+                try { 
+                    await storage.refFromURL(attachment.url).delete(); 
+                    console.log(`Deleted: ${attachment.url}`);
+                } 
+                catch (e) { console.warn(`Failed to clean up orphaned file: ${attachment.url}`, e); }
+            }));
+            if(conversationIdForCleanup) {
+                try {
+                    await db.collection('task_conversations').doc(conversationIdForCleanup).delete();
+                } catch(e) { /* Fail silently */ }
+            }
+        }
+    } finally {
+        saveTaskBtn.disabled = false;
+        if(progressContainer) progressContainer.style.display = 'none';
+    }
+});
 
 
     categorySelect?.addEventListener('change', () => customCategoryInput.classList.toggle('hide', categorySelect.value !== 'custom'));
@@ -1858,8 +1980,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     }).catch(err => console.error("Error updating original assigned task:", err));
             }
         } else if (e.target.closest('.delete-btn')) {
+        // Confirm before deleting
+        if (confirm(`Are you sure you want to delete the task "${task.text}"?`)) {
+        // Check if the task is synced to Google Calendar
+        if (task.googleCalendarEventId) {
+            // If yes, attempt to delete the calendar event first
+            deleteGoogleCalendarEvent(task.googleCalendarEventId).finally(() => {
+                // Regardless of whether the calendar deletion succeeds or fails,
+                // proceed with deleting the task from our app.
+                taskRef.delete();
+            });
+        } else {
+            // If not synced, just delete the task from our app
             taskRef.delete();
-        } else if (e.target.closest('.edit-btn')) {
+        }
+    }
+} else if (e.target.closest('.edit-btn')) {
             openTaskModal(task);
         } else if (e.target.closest('.comment-btn') || e.target.closest('.task-content')) {
              openDetailModal(taskId);
@@ -1967,4 +2103,31 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     resetAchievementsBtn?.addEventListener('click', handleResetAchievements);
+
+    // --- Google Calendar Integration --- //
+    const connectGoogleCalendarBtn = document.getElementById('connect-google-calendar-btn');
+
+    // BLOCK 1: Handles the "Connect" button in the profile settings
+    connectGoogleCalendarBtn?.addEventListener('click', () => {
+        // Set up the Google Auth provider.
+        const provider = new firebase.auth.GoogleAuthProvider();
+
+        // This is the key part - asking for permission (scope) for the calendar.
+        provider.addScope('https://www.googleapis.com/auth/calendar.events');
+
+        // Trigger the Google Sign-In popup.
+        auth.signInWithPopup(provider)
+            .then((result) => {
+                // ... (all the success logic for connecting) ...
+                const accessToken = result.credential.accessToken;
+                connectGoogleCalendarBtn.innerHTML = '<i class="fab fa-google" style="margin-right: 8px;"></i> Calendar Connected';
+                connectGoogleCalendarBtn.disabled = true;
+                updateUserPreference('googleCalendarLinked', true);
+                showFeedback(profileFeedback, "Google Calendar connected successfully!", "success");
+            }).catch((error) => {
+                // ... (all the error handling for connecting) ...
+                console.error(`Google Sign-In Error (${error.code}):`, error.message);
+                showFeedback(profileFeedback, "Could not connect to Google Calendar.", "error");
+            });
+    });
 });
