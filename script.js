@@ -2107,27 +2107,47 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Google Calendar Integration --- //
     const connectGoogleCalendarBtn = document.getElementById('connect-google-calendar-btn');
 
+    // In script.js, use this corrected block instead
+
     // BLOCK 1: Handles the "Connect" button in the profile settings
     connectGoogleCalendarBtn?.addEventListener('click', () => {
-        // Set up the Google Auth provider.
-        const provider = new firebase.auth.GoogleAuthProvider();
+        // First, check if a user is currently signed in.
+        if (!auth.currentUser) {
+            showFeedback(profileFeedback, "You must be signed in to connect your calendar.", "error");
+            return;
+        }
 
-        // This is the key part - asking for permission (scope) for the calendar.
+        const provider = new firebase.auth.GoogleAuthProvider();
         provider.addScope('https://www.googleapis.com/auth/calendar.events');
 
-        // Trigger the Google Sign-In popup.
-        auth.signInWithPopup(provider)
+        provider.setCustomParameters({ prompt: 'select_account' });
+
+        // Use linkWithPopup to connect to the *current* user, not sign in a new one.
+        auth.currentUser.linkWithPopup(provider)
             .then((result) => {
-                // ... (all the success logic for connecting) ...
-                const accessToken = result.credential.accessToken;
+                // The Google account is now linked to the existing user.
+                const credential = result.credential;
+                const accessToken = credential.accessToken;
+
+                console.log("Successfully linked Google Calendar to current user!");
+                console.log("Access Token:", accessToken);
+
+                // Update UI
                 connectGoogleCalendarBtn.innerHTML = '<i class="fab fa-google" style="margin-right: 8px;"></i> Calendar Connected';
                 connectGoogleCalendarBtn.disabled = true;
                 updateUserPreference('googleCalendarLinked', true);
                 showFeedback(profileFeedback, "Google Calendar connected successfully!", "success");
+
             }).catch((error) => {
-                // ... (all the error handling for connecting) ...
-                console.error(`Google Sign-In Error (${error.code}):`, error.message);
-                showFeedback(profileFeedback, "Could not connect to Google Calendar.", "error");
+                // Handle the specific error when a Google account is already in use by another account
+                if (error.code === 'auth/credential-already-in-use') {
+                    showFeedback(profileFeedback, "This Google account is already linked to another user.", "error");
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    showFeedback(profileFeedback, "Connection process canceled.", "error");
+                } else {
+                    console.error(`Google Link Error (${error.code}):`, error.message);
+                    showFeedback(profileFeedback, "Could not connect to Google Calendar.", "error");
+                }
             });
     });
 });
