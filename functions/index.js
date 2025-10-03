@@ -1,32 +1,62 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
 
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
-const logger = require("firebase-functions/logger");
+admin.initializeApp();
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+// This is our main email processing function.
+exports.emailToTaskWebhook = functions.https.onRequest(async (req, res) => {
+  // We only accept POST requests from Pipedream.
+  if (req.method !== "POST") {
+    res.status(405).send("Method Not Allowed");
+    return;
+  }
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+    try {
+    // 1. Extract the relevant data directly from the request body.
+    const toAddress = req.body.headers.to.text;
+    const taskTitle = req.body.headers.subject;
+    const taskDescription = req.body.text || "No content.";
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+    // FIX: The 'from' object is inside 'headers'.
+    const fromAddress = req.body.headers.from.value[0].address;
+
+    if (!fromAddress) {
+      console.error("Could not find a 'from' address in the email.");
+      res.status(400).send("Bad Request: Sender address not found.");
+      return;
+    }
+    
+    // Find the user in Firestore by their email address.
+    const usersRef = admin.firestore().collection("users");
+    const querySnapshot = await usersRef.where('email', '==', fromAddress.toLowerCase()).get();
+
+    if (querySnapshot.empty) {
+        console.error("User not found for email:", fromAddress);
+        res.status(404).send("User not found.");
+        return;
+    }
+    const userDoc = querySnapshot.docs[0];
+    const userId = userDoc.id;
+
+    // 3. Create a new task in that user's 'tasks' subcollection in Firestore.
+    const userTasksRef = admin.firestore()
+        .collection("users").doc(userId).collection("tasks");
+
+    await userTasksRef.add({
+      text: taskTitle,
+      description: taskDescription,
+      status: "todo",
+      priority: "medium",
+      category: "Email",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      order: Date.now(),
+    });
+
+    console.log(`Successfully created task for user: ${userId}`);
+    res.status(200).send("Task created successfully.");
+
+  } catch (error) {
+    console.error("Error processing webhook:", error);
+    res.status(500).send("Internal Server Error.");
+  }
+  });
