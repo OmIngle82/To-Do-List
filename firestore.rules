@@ -5,11 +5,9 @@ service cloud.firestore {
 
     // --- USER & TASK RULES ---
     match /users/{userId} {
-      // This rule is the fix: It allows any signed-in user to 'get' any
-      // single user's profile document. This is needed to display names in comments.
+      // Allows any signed-in user to 'get' any user's profile.
       allow get, list: if request.auth.uid != null;
-      
-      // A user can only update their own profile.
+      // A user can only create or update their own profile.
       allow create, update: if request.auth.uid == userId;
 
       match /tasks/{taskId} {
@@ -44,6 +42,13 @@ service cloud.firestore {
                        && request.resource.data.updatedBy.uid == request.auth.uid;
         allow update, delete: if request.auth.uid == resource.data.updatedBy.uid;
       }
+    }
+
+    // --- SLACK INTEGRATION RULES ---
+    match /slackIntegrations/{slackId} {
+      // Allow a logged-in user to create a document linking their own account.
+      allow create: if request.auth.uid != null &&
+                      request.resource.data.firestoreUserId == request.auth.uid;
     }
   }
 }

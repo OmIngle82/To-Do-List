@@ -81,6 +81,7 @@ let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', 
 let currentStatusFilter = 'all', currentCategoryFilter = 'all', currentPriorityFilter = 'all', currentSearchTerm = '';
 let selectedDateFilter = null;
 let editingTaskId = null, detailTaskId = null;
+let pendingSlackLink = null;
 let existingAttachments = [];
 let originalAttachmentsBeforeEdit = [];
 let calendarDate = new Date();
@@ -167,16 +168,33 @@ const showFeedback = (element, message, type) => {
 const updateUIforLoginState = (user) => {
     currentUser = user;
     if (user) {
-        runTaskOrderMigration();
+        // --- NEW LOGIC ---
+        // If a user just logged in AND we were trying to link a Slack account,
+        // go back to the linking page and auto-click the button.
+        if (pendingSlackLink && pendingSlackLink.slackId) {
+            showPage('link-slack-page');
+            // Programmatically click the button to complete the link
+            document.getElementById('complete-slack-link-btn')?.click();
+            return; // Stop the function here
+        }
+        // --- END OF NEW LOGIC ---
+
         [signinLink, signupLink].forEach(el => el.classList.add('hide'));
         profileMenu.classList.remove('hide');
         showPage('todo-page');
         listenForProfile();
         listenForTasks();
+
     } else {
         [signinLink, signupLink].forEach(el => el.classList.remove('hide'));
         profileMenu.classList.add('hide');
-        showPage('signin-page');
+        // If there's a pending link, show the link page instead of the default signin page
+        if (pendingSlackLink && pendingSlackLink.slackId) {
+            showPage('link-slack-page');
+        } else {
+            showPage('signin-page');
+        }
+        
         if (unsubscribeTasks) unsubscribeTasks();
         if (unsubscribeProfile) unsubscribeProfile();
         cleanupCommentListener();
@@ -410,25 +428,33 @@ const deleteGoogleCalendarEvent = async (eventId) => {
     }
 };
 
+
 const handleSlackLinking = () => {
-    // Check if the URL hash contains '#link-slack'
     if (window.location.hash.startsWith('#link-slack')) {
-        // Manually parse the slack_id from the string after the '?'
         const queryString = window.location.hash.split('?')[1];
         const urlParams = new URLSearchParams(queryString);
         const slackId = urlParams.get('slack_id');
 
         if (slackId) {
-            // This part is now fixed and will correctly show the link-slack-page
-            showPage('link-slack-page'); 
+            // Save the pending action
+            pendingSlackLink = { slackId: slackId };
+            
+            // If the user is already logged in, show the link page.
+            // If not, the onAuthStateChanged listener will handle it.
+            if (currentUser) {
+                showPage('link-slack-page');
+            } else {
+                 // If not logged in, show the signin page first.
+                showPage('signin-page');
+            }
 
             const linkBtn = document.getElementById('complete-slack-link-btn');
             const feedbackEl = document.getElementById('link-slack-feedback');
 
             linkBtn.addEventListener('click', async () => {
                 if (!currentUser) {
-                    showFeedback(feedbackEl, "Please sign in or sign up first, then click this button again.", "error");
-                    showPage('signin-page'); 
+                    showFeedback(feedbackEl, "Please sign in or sign up first, then we will complete the linking.", "error");
+                    showPage('signin-page');
                     return;
                 }
 
@@ -440,13 +466,12 @@ const handleSlackLinking = () => {
                     await db.collection('slackIntegrations').doc(slackId).set({
                         firestoreUserId: firestoreUserId
                     });
-
                     showFeedback(feedbackEl, "Success! Your Slack account is now linked.", "success");
                     
                     setTimeout(() => {
-                        window.location.hash = ''; // Clear the hash
+                        window.location.hash = '';
+                        pendingSlackLink = null; // Clear the pending action
                         showPage('todo-page');
-                        // We need to re-render to clear any visual state from the link-slack-page
                         renderAll(); 
                     }, 2000);
 
@@ -460,7 +485,6 @@ const handleSlackLinking = () => {
         }
     }
 };
-
 // --- Main Render Functions --- //
 const renderAll = () => {
     updateTaskCounters();
