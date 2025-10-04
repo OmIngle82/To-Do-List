@@ -410,29 +410,28 @@ const deleteGoogleCalendarEvent = async (eventId) => {
     }
 };
 
-// In script.js
-
 const handleSlackLinking = () => {
-    // Check if the URL is for linking a Slack account
-    if (window.location.hash === '#link-slack') {
-        const urlParams = new URLSearchParams(window.location.search);
+    // Check if the URL hash contains '#link-slack'
+    if (window.location.hash.startsWith('#link-slack')) {
+        // Manually parse the slack_id from the string after the '?'
+        const queryString = window.location.hash.split('?')[1];
+        const urlParams = new URLSearchParams(queryString);
         const slackId = urlParams.get('slack_id');
 
         if (slackId) {
-            showPage('link-slack-page');
+            // This part is now fixed and will correctly show the link-slack-page
+            showPage('link-slack-page'); 
+
             const linkBtn = document.getElementById('complete-slack-link-btn');
             const feedbackEl = document.getElementById('link-slack-feedback');
 
             linkBtn.addEventListener('click', async () => {
-                // Check if a user is logged in
                 if (!currentUser) {
                     showFeedback(feedbackEl, "Please sign in or sign up first, then click this button again.", "error");
-                    // Show the sign-in page but keep the URL parameters
                     showPage('signin-page'); 
                     return;
                 }
 
-                // If logged in, save the connection to Firestore
                 linkBtn.disabled = true;
                 linkBtn.textContent = "Linking...";
                 
@@ -445,9 +444,10 @@ const handleSlackLinking = () => {
                     showFeedback(feedbackEl, "Success! Your Slack account is now linked.", "success");
                     
                     setTimeout(() => {
-                        // Redirect to the main app page
-                        window.location.hash = '';
+                        window.location.hash = ''; // Clear the hash
                         showPage('todo-page');
+                        // We need to re-render to clear any visual state from the link-slack-page
+                        renderAll(); 
                     }, 2000);
 
                 } catch (error) {
