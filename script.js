@@ -410,6 +410,57 @@ const deleteGoogleCalendarEvent = async (eventId) => {
     }
 };
 
+// In script.js
+
+const handleSlackLinking = () => {
+    // Check if the URL is for linking a Slack account
+    if (window.location.hash === '#link-slack') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const slackId = urlParams.get('slack_id');
+
+        if (slackId) {
+            showPage('link-slack-page');
+            const linkBtn = document.getElementById('complete-slack-link-btn');
+            const feedbackEl = document.getElementById('link-slack-feedback');
+
+            linkBtn.addEventListener('click', async () => {
+                // Check if a user is logged in
+                if (!currentUser) {
+                    showFeedback(feedbackEl, "Please sign in or sign up first, then click this button again.", "error");
+                    // Show the sign-in page but keep the URL parameters
+                    showPage('signin-page'); 
+                    return;
+                }
+
+                // If logged in, save the connection to Firestore
+                linkBtn.disabled = true;
+                linkBtn.textContent = "Linking...";
+                
+                try {
+                    const firestoreUserId = currentUser.uid;
+                    await db.collection('slackIntegrations').doc(slackId).set({
+                        firestoreUserId: firestoreUserId
+                    });
+
+                    showFeedback(feedbackEl, "Success! Your Slack account is now linked.", "success");
+                    
+                    setTimeout(() => {
+                        // Redirect to the main app page
+                        window.location.hash = '';
+                        showPage('todo-page');
+                    }, 2000);
+
+                } catch (error) {
+                    console.error("Error linking Slack account:", error);
+                    showFeedback(feedbackEl, "An error occurred. Please try again.", "error");
+                    linkBtn.disabled = false;
+                    linkBtn.textContent = "Complete Linking";
+                }
+            });
+        }
+    }
+};
+
 // --- Main Render Functions --- //
 const renderAll = () => {
     updateTaskCounters();
@@ -2107,8 +2158,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Google Calendar Integration --- //
     const connectGoogleCalendarBtn = document.getElementById('connect-google-calendar-btn');
 
-    // In script.js, use this corrected block instead
-
     // BLOCK 1: Handles the "Connect" button in the profile settings
     connectGoogleCalendarBtn?.addEventListener('click', () => {
         // First, check if a user is currently signed in.
@@ -2150,4 +2199,5 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
     });
+    handleSlackLinking();
 });

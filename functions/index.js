@@ -100,3 +100,65 @@ exports.sendTaskReminders = onSchedule("every 15 minutes", async (event) => {
     
     return null;
 });
+
+// --- FUNCTION 3: Slack Slash Command Handler ---
+exports.slackTodoCommand = onRequest(async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).send("Method Not Allowed");
+    return;
+  }
+
+  try {
+    const slackUserId = req.body.user_id;
+    const taskText = req.body.text;
+    const responseUrl = req.body.response_url; // URL for sending delayed responses
+
+    if (!taskText) {
+      return res.status(200).send({
+        response_type: "ephemeral", // Private message
+        text: "Please provide some text for your task. Usage: `/todo Finish report`",
+      });
+    }
+
+    // 1. Look up the Slack user ID to find their linked app account.
+    const integrationDocRef = admin.firestore().collection("slackIntegrations").doc(slackUserId);
+    const integrationDoc = await integrationDocRef.get();
+
+    if (!integrationDoc.exists) {
+      // 2. If the user is not linked, send a private message asking them to link.
+      const appUrl = "https://omingle82.github.io/To-Do-List/";
+      const linkUrl = `${appUrl}#link-slack?slack_id=${slackUserId}`;
+      
+      return res.status(200).send({
+        response_type: "ephemeral", // 'ephemeral' means the message is only visible to the user
+        text: `Welcome! To create tasks from Slack, you first need to link your account. Please visit this link to connect: ${linkUrl}`,
+      });
+    }
+
+    // 3. If the user is linked, create the task.
+    const firestoreUserId = integrationDoc.data().firestoreUserId;
+    const userTasksRef = admin.firestore().collection("users").doc(firestoreUserId).collection("tasks");
+
+    await userTasksRef.add({
+      text: taskText,
+      status: "todo",
+      priority: "medium",
+      category: "Slack",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      order: Date.now(),
+    });
+
+    // Send a confirmation message back to the user
+    return res.status(200).send({
+      response_type: "ephemeral",
+      text: `✅ Task created: "${taskText}"`,
+    });
+
+  } catch (error) {
+    console.error("Error in Slack command handler:", error);
+    return res.status(200).send({
+      response_type: "ephemeral",
+      text: "Sorry, an internal error occurred while creating your task.",
+    });
+  }
+});
