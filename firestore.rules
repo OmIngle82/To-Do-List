@@ -47,7 +47,7 @@ service cloud.firestore {
     // --- SLACK INTEGRATION RULES ---
     match /slackIntegrations/{slackId} {
       // Allow a logged-in user to create a document linking their own account.
-      allow create: if request.auth.uid != null &&
+      allow write: if request.auth.uid != null &&
                       request.resource.data.firestoreUserId == request.auth.uid;
     }
   }

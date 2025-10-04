@@ -436,28 +436,25 @@ const handleSlackLinking = () => {
         const slackId = urlParams.get('slack_id');
 
         if (slackId) {
-            // Save the pending action
-            pendingSlackLink = { slackId: slackId };
-            
-            // If the user is already logged in, show the link page.
-            // If not, the onAuthStateChanged listener will handle it.
-            if (currentUser) {
-                showPage('link-slack-page');
-            } else {
-                 // If not logged in, show the signin page first.
-                showPage('signin-page');
-            }
-
+            showPage('link-slack-page');
             const linkBtn = document.getElementById('complete-slack-link-btn');
             const feedbackEl = document.getElementById('link-slack-feedback');
+            const instructionsEl = document.getElementById('link-slack-instructions');
 
-            linkBtn.addEventListener('click', async () => {
+            // This function runs when the page loads and when the link button is clicked
+            const attemptToLink = async () => {
+                // If user is not logged in, change the button to a "Sign In" button
                 if (!currentUser) {
-                    showFeedback(feedbackEl, "Please sign in or sign up first, then we will complete the linking.", "error");
-                    showPage('signin-page');
-                    return;
+                    instructionsEl.textContent = "Please sign in to your To-Do List account first. After you sign in, come back to this tab and click the button again.";
+                    linkBtn.textContent = "Sign In to Link Account";
+                    linkBtn.onclick = () => {
+                        // Open the sign-in page in a new tab
+                        window.open(window.location.origin + window.location.pathname + '#signin', '_blank');
+                    };
+                    return; // Stop here until they are logged in
                 }
 
+                // If we get here, the user is logged in
                 linkBtn.disabled = true;
                 linkBtn.textContent = "Linking...";
                 
@@ -466,14 +463,12 @@ const handleSlackLinking = () => {
                     await db.collection('slackIntegrations').doc(slackId).set({
                         firestoreUserId: firestoreUserId
                     });
-                    showFeedback(feedbackEl, "Success! Your Slack account is now linked.", "success");
-                    
-                    setTimeout(() => {
-                        window.location.hash = '';
-                        pendingSlackLink = null; // Clear the pending action
-                        showPage('todo-page');
-                        renderAll(); 
-                    }, 2000);
+
+                    // UX IMPROVEMENT 2: Show a clear success message and don't redirect
+                    instructionsEl.textContent = "You can now create tasks from Slack using the /todo command.";
+                    showFeedback(feedbackEl, "Success! Your Slack account is now linked. You can close this tab.", "success");
+                    linkBtn.textContent = "Linked Successfully!";
+                    // The button remains disabled
 
                 } catch (error) {
                     console.error("Error linking Slack account:", error);
@@ -481,7 +476,13 @@ const handleSlackLinking = () => {
                     linkBtn.disabled = false;
                     linkBtn.textContent = "Complete Linking";
                 }
-            });
+            };
+
+            // Add the listener to the button
+            linkBtn.addEventListener('click', attemptToLink);
+            
+            // Also run the check immediately when the page loads
+            attemptToLink();
         }
     }
 };
