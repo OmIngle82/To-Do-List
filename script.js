@@ -74,6 +74,8 @@ const badgeModalName = document.getElementById('badge-modal-name');
 const badgeModalOkBtn = document.getElementById('badge-modal-ok-btn');
 const resetAchievementsBtn = document.getElementById('reset-achievements-btn');
 const connectGoogleCalendarBtn = document.getElementById('connect-google-calendar-btn');
+const exportExcelBtn = document.getElementById('export-excel-btn');
+const exportPdfBtn = document.getElementById('export-pdf-btn');
 
 // --- App State --- //
 let allTasks = [], currentUser = null, currentUserProfile = {};
@@ -2224,5 +2226,137 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
     });
+
+    // --- EXPORT FEATURE LOGIC --- //
+    const exportBtn = document.getElementById('export-btn');
+    const exportModal = document.getElementById('export-modal');
+    const cancelExportBtn = document.getElementById('cancel-export-btn');
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+
+    exportBtn?.addEventListener('click', () => exportModal.classList.remove('hide'));
+    cancelExportBtn?.addEventListener('click', () => exportModal.classList.add('hide'));
+
+    const escapeCsvCell = (cell) => {
+        if (cell === null || cell === undefined) {
+            return '';
+        }
+        const cellStr = String(cell);
+        // FIX: Changed /[,\\n"]/ to /[,\n"]/ to correctly find newline characters.
+        if (cellStr.search(/[,"]/) >= 0) {
+            // Also, escape any existing double quotes by doubling them.
+            return `"${cellStr.replace(/"/g, '""')}"`;
+        }
+        return cellStr;
+    };
+
+    const exportTasksToCsv = () => {
+        const tasksToExport = getFilteredTasks();
+        if (tasksToExport.length === 0) {
+            alert("No tasks to export based on the current filters.");
+            return;
+        }
+
+        const headers = ["Title", "Status", "Priority", "Category", "Deadline", "Subtasks"];
+        
+        const rows = tasksToExport.map(task => {
+            const deadline = task.deadline ? task.deadline.toDate().toLocaleString() : '';
+            const subtasks = task.subtasks ? task.subtasks.map(s => s.text).join('; ') : '';
+            
+            return [
+                task.text,
+                task.status,
+                task.priority,
+                task.category,
+                deadline,
+                subtasks
+            ].map(escapeCsvCell).join(',');
+        });
+
+        // FIX: Changed '\\n' to '\n' to create proper newlines.
+        const csvContent = [headers.join(','), ...rows].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "tasks.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        exportModal.classList.add('hide');
+    };
+    const exportTasksToExcel = () => {
+        const tasksToExport = getFilteredTasks();
+        if (tasksToExport.length === 0) {
+            alert("No tasks to export based on the current filters.");
+            return;
+        }
+
+        // 1. Format the data into an array of objects
+        const formattedData = tasksToExport.map(task => ({
+            Title: task.text,
+            Status: task.status,
+            Priority: task.priority,
+            Category: task.category,
+            Deadline: task.deadline ? task.deadline.toDate().toLocaleString() : '',
+            Subtasks: task.subtasks ? task.subtasks.map(s => s.text).join('; ') : ''
+        }));
+
+        // 2. Create a worksheet from the data
+        const worksheet = XLSX.utils.json_to_sheet(formattedData);
+
+        // 3. Create a workbook and add the worksheet
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Tasks");
+
+        // 4. Trigger the download
+        XLSX.writeFile(workbook, "tasks.xlsx");
+
+        exportModal.classList.add('hide');
+    };
+
+    const exportTasksToPdf = () => {
+        const tasksToExport = getFilteredTasks();
+        if (tasksToExport.length === 0) {
+            alert("No tasks to export based on the current filters.");
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // 1. Define the table headers and rows
+        const tableHeaders = [["Title", "Status", "Priority", "Category", "Deadline"]];
+        const tableRows = tasksToExport.map(task => ([
+            task.text,
+            task.status,
+            task.priority,
+            task.category,
+            task.deadline ? task.deadline.toDate().toLocaleDateString() : ''
+        ]));
+
+        // 2. Add a title to the document
+        doc.text("My To-Do List", 14, 15);
+
+        // 3. Use the autoTable plugin to generate the table
+        doc.autoTable({
+            head: tableHeaders,
+            body: tableRows,
+            startY: 20, // Start the table below the title
+        });
+
+        // 4. Trigger the download
+        doc.save('tasks.pdf');
+
+        exportModal.classList.add('hide');
+    };
+
+    exportPdfBtn?.addEventListener('click', exportTasksToPdf);
+    exportExcelBtn?.addEventListener('click', exportTasksToExcel);
+    exportCsvBtn?.addEventListener('click', exportTasksToCsv);
     handleSlackLinking();
 });

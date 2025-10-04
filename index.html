@@ -187,6 +187,9 @@
                         </div>
                          <div class="list-controls">
                             <div id="category-filters" class="category-filters"></div>
+                            <button id="export-btn" class="settings-btn" title="Export Tasks">
+                                <i class="fas fa-file-export"></i> Export
+                            </button>
                             <div class="team-controls-container hide">
                                 <button id="assign-tasks-btn" title="Assign Tasks">
                                     <i class="fas fa-user-plus"></i> Assign
@@ -362,6 +365,20 @@
             <button id="badge-modal-ok-btn" class="modal-btn save-btn">Awesome!</button>
         </div>
     </div>
+    <div id="export-modal" class="modal-overlay hide">
+    <div class="modal-content">
+        <h2 class="form-title">Export Tasks</h2>
+        <p style="text-align: center; margin-bottom: 2rem;">Choose a format to download your currently filtered tasks.</p>
+        <div class="modal-actions export-options" style="justify-content: center;">
+            <button id="export-csv-btn" class="modal-btn">Export as CSV</button>
+            <button id="export-pdf-btn" class="modal-btn">Export as PDF</button>
+            <button id="export-excel-btn" class="modal-btn">Export as Excel</button>
+        </div>
+        <div class="modal-actions" style="justify-content: center; margin-top: 1rem;">
+             <button id="cancel-export-btn" class="modal-btn cancel-btn">Cancel</button>
+        </div>
+    </div>
+</div>
 
 
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
@@ -375,6 +392,9 @@
     <script src="ai-suggestions.js"></script>
     <script src="teammode.js"></script>
     <script src="voice-feature.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/jspdf-autotable@3.5.23/dist/jspdf.plugin.autotable.js"></script>
 
     <div id="offline-indicator" class="offline-indicator hide">You are currently offline. Changes will sync when you reconnect.</div>
 </body>

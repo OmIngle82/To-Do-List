@@ -1065,3 +1065,17 @@ body.team-mode .simple-mode-only {
 #link-slack-page.hide {
     display: none;
 }
+
+/* Default 'outline' style for all three export buttons */
+.export-options .modal-btn {
+    background-color: transparent;
+    border: 2px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+/* Hover 'fill' effect for all three export buttons */
+.export-options .modal-btn:hover {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    transition: ease-in,0.5s;
+}
