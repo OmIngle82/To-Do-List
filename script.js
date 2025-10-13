@@ -26,10 +26,11 @@ const messaging = firebase.messaging();
 
 // --- My DOM Elements --- //
 const signinPage = document.getElementById('signin-page'), signupPage = document.getElementById('signup-page');
-const todoPage = document.getElementById('todo-page'), profilePage = document.getElementById('profile-page');
+const todoPage = document.getElementById('todo-page'), profilePage = document.getElementById('profile-page'), adminPage = document.getElementById('admin-page'); // Add adminPage here
 const signinLink = document.getElementById('signin-link'), signupLink = document.getElementById('signup-link');
 const profileMenu = document.getElementById('profile-menu'), profileDropdown = document.querySelector('.profile-dropdown');
 const profileLink = document.getElementById('profile-link'), logoutBtn = document.getElementById('logout-btn');
+const adminLink = document.getElementById('admin-link');
 const logo = document.querySelector('.logo'), backBtn = document.getElementById('back-btn');
 const signinForm = document.getElementById('signin-form'), signupForm = document.getElementById('signup-form');
 const showSignup = document.getElementById('show-signup'), showSignin = document.getElementById('show-signin');
@@ -84,6 +85,7 @@ let currentStatusFilter = 'all', currentCategoryFilter = 'all', currentPriorityF
 let selectedDateFilter = null;
 let editingTaskId = null, detailTaskId = null;
 let pendingSlackLink = null;
+let analyticsChart = null;
 let existingAttachments = [];
 let originalAttachmentsBeforeEdit = [];
 let calendarDate = new Date();
@@ -150,8 +152,8 @@ const showPage = (pageId) => {
     const analyticsPage = document.getElementById('analytics-page'); 
 
     // Use a filter to remove any pages that might not exist yet.
-    [signinPage, signupPage, todoPage, profilePage, analyticsPage]
-        .filter(page => page) // This ensures we don't try to access a null element
+    [signinPage, signupPage, todoPage, profilePage, analyticsPage, adminPage] // Add adminPage here
+        .filter(page => page)
         .forEach(page => page.classList.add('hide'));
 
     document.getElementById(pageId).classList.remove('hide');
@@ -263,6 +265,32 @@ const listenForProfile = () => {
             const photoURL = currentUserProfile.photoURL || 'https://placehold.co/100x100/d4a373/fefae0?text=User';
             if(profilePhotoPreview) profilePhotoPreview.src = photoURL;
             if(menuProfilePhoto) menuProfilePhoto.src = photoURL;
+
+            // Add this logic to show/hide the admin link
+            if (adminLink) {
+                adminLink.classList.toggle('hide', currentUserProfile.role !== 'admin');
+            }
+            const profilePhotoContainer = document.getElementById('profilePhotoContainer');
+            const menuProfilePhotoContainer = document.getElementById('menuProfilePhotoContainer');
+
+            if (currentUserProfile.subscription?.status === 'premium') {
+                if (profilePhotoContainer) profilePhotoContainer.classList.add('premium-ring');
+                if (menuProfilePhotoContainer) menuProfilePhotoContainer.classList.add('premium-ring');
+            } else {
+                if (profilePhotoContainer) profilePhotoContainer.classList.remove('premium-ring');
+                if (menuProfilePhotoContainer) menuProfilePhotoContainer.classList.remove('premium-ring');
+            }
+            const subStatusEl = document.getElementById('subscription-status');
+            const upgradeBtn = document.getElementById('upgrade-to-premium-btn');
+
+            if (currentUserProfile.subscription?.status === 'premium') {
+                subStatusEl.textContent = 'You are on the Premium Plan. ✨';
+                upgradeBtn.classList.add('hide');
+            } else {
+                subStatusEl.textContent = 'You are currently on the Free Plan.';
+                upgradeBtn.classList.remove('hide');
+            }
+
             applyUserPreferences(currentUserProfile.preferences);
         }
     });
@@ -828,6 +856,160 @@ const renderAnalytics = () => {
     }
     if (weeklyCountEl) {
         weeklyCountEl.textContent = tasksCompletedThisWeek.length;
+    }
+};
+
+const loadUsersForAdmin = async () => {
+    const userListContainer = document.getElementById('user-list-container');
+    if (!userListContainer) return;
+
+    if (!currentUserProfile || currentUserProfile.role !== 'admin') {
+        userListContainer.innerHTML = `<p class="feedback error">You do not have permission to view this page.</p>`;
+        return;
+    }
+
+    userListContainer.innerHTML = `<p>Loading users...</p>`;
+
+    try {
+        const snapshot = await db.collection('users').get();
+        if (snapshot.empty) {
+            userListContainer.innerHTML = `<p>No users found.</p>`;
+            return;
+        }
+
+        let usersHTML = `
+            <div class="admin-user-list">
+                <div class="admin-user-item header">
+                    <div class="user-info-wrapper">
+                        <span>Display Name</span>
+                        <span>Email</span>
+                        <span>Role</span>
+                        <span>Premium Status</span>
+                    </div>
+                    <div class="user-actions">
+                        <span>Actions</span>
+                    </div>
+                </div>
+        `;
+
+        snapshot.docs.forEach(doc => {
+            const user = { id: doc.id, ...doc.data() };
+            const isBanned = user.status === 'banned';
+            const isAdmin = user.role === 'admin'; // This line was missing
+
+            const itemClass = isBanned ? 'admin-user-item banned-user' : 'admin-user-item';
+            
+            // This variable was named incorrectly in your file
+            const banButton = isBanned 
+                ? `<button class="user-action-btn unban-btn">Unban</button>`
+                : `<button class="user-action-btn ban-btn">Ban</button>`;
+
+            const roleButton = isAdmin
+                ? `<button class="user-action-btn remove-admin-btn">Remove Admin</button>`
+                : `<button class="user-action-btn role-btn">Make Admin</button>`;
+
+            usersHTML += `
+                <div class="${itemClass}" data-id="${user.id}">
+                    <div class="user-info-wrapper">
+                        <span>${user.displayName || 'N/A'}</span>
+                        <span>${user.email}</span>
+                        <span>${user.role || 'user'}</span>
+                        <span>${user.subscription?.status === 'premium' ? 'Premium ✨' : 'Free'}</span>
+                    </div>
+                    <div class="user-actions">
+                        ${banButton}
+                        ${roleButton}
+                    </div>
+                </div>`;
+        });    
+
+
+        usersHTML += `</div>`;
+        userListContainer.innerHTML = usersHTML;
+
+    } catch (error) {
+        console.error("Error loading users for admin:", error);
+        userListContainer.innerHTML = `<p class="feedback error">Could not load user data.</p>`;
+    }
+};
+
+const loadAndRenderAnalytics = async () => {
+    const container = document.getElementById('analytics-container');
+    if (!container) return;
+
+    try {
+        const snapshot = await db.collection('system_analytics').orderBy('date', 'desc').limit(7).get();
+
+        if (snapshot.empty) {
+            container.innerHTML = `<p>No analytics data found yet. The first report will be generated within 24 hours.</p>`;
+            return;
+        }
+        
+        const reports = snapshot.docs.map(doc => doc.data());
+        const latestReport = reports[0];
+
+        container.innerHTML = `
+            <div class="stats-container" style="margin-bottom: 2rem;">
+                <div class="stat-card"><h4>Total Users</h4><p id="analytics-total-users">0</p></div>
+                <div class="stat-card"><h4>New Users (24h)</h4><p id="analytics-new-users">0</p></div>
+                <div class="stat-card"><h4>Total Tasks</h4><p id="analytics-total-tasks">0</p></div>
+                <div class="stat-card"><h4>Tasks Completed</h4><p id="analytics-completed-tasks">0</p></div>
+            </div>
+            <div class="chart-container">
+                <canvas id="analytics-chart"></canvas>
+            </div>
+        `;
+
+        document.getElementById('analytics-total-users').textContent = latestReport.totalUsers;
+        document.getElementById('analytics-new-users').textContent = latestReport.newUsers;
+        document.getElementById('analytics-total-tasks').textContent = latestReport.totalTasks;
+        document.getElementById('analytics-completed-tasks').textContent = latestReport.completedTasks;
+
+        const chartLabels = reports.map(r => new Date(r.date.seconds * 1000).toLocaleDateString()).reverse();
+        const totalTasksData = reports.map(r => r.totalTasks).reverse();
+        const completedTasksData = reports.map(r => r.completedTasks).reverse();
+        
+        const ctx = document.getElementById('analytics-chart').getContext('2d');
+
+        // --- THIS IS THE FIX ---
+        // 1. Check if a chart instance already exists and destroy it.
+        if (analyticsChart) {
+            analyticsChart.destroy();
+        }
+        
+        // 2. Create the new chart and assign it to our global variable.
+        analyticsChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartLabels,
+                datasets: [
+                    {
+                        label: 'Total Tasks Created',
+                        data: totalTasksData,
+                        backgroundColor: 'rgba(212, 163, 115, 0.6)',
+                        borderColor: 'rgba(212, 163, 115, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Tasks Completed',
+                        data: completedTasksData,
+                        backgroundColor: 'rgba(42, 157, 143, 0.6)',
+                        borderColor: 'rgba(42, 157, 143, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                scales: { y: { beginAtZero: true } },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+        // --- END OF FIX ---
+
+    } catch (error) {
+        console.error("Error loading system analytics:", error);
+        container.innerHTML = `<p class="feedback error">Could not load analytics data.</p>`;
     }
 };
 
@@ -1748,6 +1930,141 @@ document.addEventListener('DOMContentLoaded', () => {
         showPage('analytics-page');
         profileDropdown.classList.remove('show');
     });
+    adminLink?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showPage('admin-page');
+        loadUsersForAdmin(); 
+        loadAndRenderAnalytics();
+        profileDropdown.classList.remove('show');
+    });
+
+    document.addEventListener('click', async (e) => {
+    // Find the parent user item for any button that might have been clicked
+    const userItem = e.target.closest('.admin-user-item');
+    if (!userItem) return; // Exit if the click was not inside a user row
+
+    const userId = userItem.dataset.id;
+    if (!userId) return;
+
+    // Use a more specific selector to get the email text
+    const userEmailSpan = userItem.querySelector('.user-info-wrapper span:nth-child(2)');
+    const userEmail = userEmailSpan ? userEmailSpan.textContent : 'this user';
+    
+    // Prevent admins from performing actions on themselves
+    if (userId === currentUser.uid && (e.target.matches('.ban-btn') || e.target.matches('.remove-admin-btn'))) {
+        alert("You cannot perform this action on yourself.");
+        return;
+    }
+
+    // --- BAN LOGIC ---
+    if (e.target.matches('.ban-btn') && confirm(`Are you sure you want to ban ${userEmail}?`)) {
+        const button = e.target;
+        button.textContent = 'Banning...';
+        button.disabled = true;
+        try {
+            const banUserFunction = firebase.functions().httpsCallable('banUser');
+            await banUserFunction({ userId });
+            alert('User banned successfully.');
+            // Reload list to ensure UI is fully consistent
+            loadUsersForAdmin(); 
+        } catch (error) {
+            alert(`Failed to ban user: ${error.message}`);
+            button.textContent = 'Ban';
+            button.disabled = false;
+        }
+    } 
+    // --- UNBAN LOGIC ---
+    else if (e.target.matches('.unban-btn') && confirm(`Are you sure you want to unban ${userEmail}?`)) {
+        const button = e.target;
+        button.textContent = 'Unbanning...';
+        button.disabled = true;
+        try {
+            const unbanUserFunction = firebase.functions().httpsCallable('unbanUser');
+            await unbanUserFunction({ userId });
+            alert('User unbanned successfully.');
+            loadUsersForAdmin(); // Reload list
+        } catch (error) {
+            alert(`Failed to unban user: ${error.message}`);
+            button.textContent = 'Unban';
+            button.disabled = false;
+        }
+    }
+    // --- ROLE CHANGE LOGIC ---
+    else if (e.target.matches('.role-btn') && confirm(`Are you sure you want to make ${userEmail} an admin?`)) {
+        const button = e.target;
+        button.textContent = 'Updating...';
+        button.disabled = true;
+        try {
+            const changeUserRoleFunction = firebase.functions().httpsCallable('changeUserRole');
+            await changeUserRoleFunction({ userId, newRole: 'admin' });
+            alert('User role updated to admin.');
+            loadUsersForAdmin();
+        } catch (error) {
+            alert(`Failed to update role: ${error.message}`);
+            button.textContent = 'Make Admin';
+            button.disabled = false;
+        }
+    } 
+    else if (e.target.matches('.remove-admin-btn') && confirm(`Are you sure you want to remove admin rights for ${userEmail}?`)) {
+        const button = e.target;
+        button.textContent = 'Updating...';
+        button.disabled = true;
+        try {
+            const changeUserRoleFunction = firebase.functions().httpsCallable('changeUserRole');
+            await changeUserRoleFunction({ userId, newRole: 'user' });
+            alert('User role updated to user.');
+            loadUsersForAdmin();
+        } catch (error) {
+            alert(`Failed to update role: ${error.message}`);
+            button.textContent = 'Remove Admin';
+            button.disabled = false;
+        }
+    }
+});
+document.addEventListener('click', async (e) => {
+    if (e.target.matches('#upgrade-to-premium-btn')) {
+        e.target.textContent = 'Opening checkout...';
+        e.target.disabled = true;
+
+        try {
+            // 1. Call the backend function to create a subscription
+            const createRazorpaySubscription = firebase.functions().httpsCallable('createRazorpaySubscription');
+            const { data } = await createRazorpaySubscription();
+
+            const options = {
+                key: "rzp_test_RSSlg4Qv0KAHrY", //  PASTE YOUR rzp_test_... KEY ID HERE
+                subscription_id: data.subscriptionId,
+                name: "Task Manager - Premium Plan",
+                description: "Unlock all premium features",
+                handler: function (response){
+                    alert("Payment successful! Your account will be upgraded shortly.");
+                    console.log("Razorpay Response:", response);
+                },
+                prefill: {
+                    name: currentUserProfile.displayName || "",
+                    email: currentUser.email
+                },
+                theme: {
+                    color: userPreferences.accentColor || "#d4a373"
+                }
+            };
+            
+            const rzp = new Razorpay(options);
+            rzp.open();
+
+            rzp.on('payment.failed', function (response){
+                alert("Payment failed: " + response.error.description);
+            });
+
+        } catch (error) {
+            console.error("Razorpay Checkout error:", error);
+            alert('Could not initiate checkout. Please try again.');
+        } finally {
+            e.target.textContent = 'Upgrade to Premium';
+            e.target.disabled = false;
+        }
+    }
+});
 
     badgeModalOkBtn?.addEventListener('click', hideAchievementModal);
     showSignup?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
@@ -1766,7 +2083,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 email: userEmail.toLowerCase(),
                 photoURL: 'https://placehold.co/100x100/d4a373/fefae0?text=User',
                 preferences: userPreferences,
-                unlockedBadges: []
+                unlockedBadges: [],
+                role: 'user' 
             }))
             .catch(error => showFeedback(signupFeedback, error.message, 'error'));
     });
@@ -1818,7 +2136,9 @@ document.addEventListener('DOMContentLoaded', () => {
         detailTaskId = null;
     });
 
-    saveTaskBtn?.addEventListener('click', async () => {
+    saveTaskBtn?.addEventListener('click', async () => {const signinPage = document.getElementById('signin-page'), signupPage = document.getElementById('signup-page');
+    const todoPage = document.getElementById('todo-page'), profilePage = document.getElementById('profile-page');
+    const signinLink = document.getElementById('signin-link'), signupLink = document.getElementById('signup-link');
     if (!taskInput.value.trim()) return;
 
     const syncCheckbox = document.getElementById('google-calendar-sync-checkbox');

@@ -50,5 +50,9 @@ service cloud.firestore {
       allow write: if request.auth.uid != null &&
                       request.resource.data.firestoreUserId == request.auth.uid;
     }
+    match /system_analytics/{docId} {
+      allow read: if request.auth.token.role == 'admin';
+      allow write: if false;
+    }
   }
 }

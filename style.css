@@ -1079,3 +1079,136 @@ body.team-mode .simple-mode-only {
     color: var(--text-light);
     transition: ease-in,0.5s;
 }
+
+/* --- Admin Panel Styles --- */
+.admin-user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.admin-user-item {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr 0.5fr 1fr;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: var(--bg-color);
+}
+
+.admin-user-item:not(.header):nth-child(even) {
+    background-color: var(--app-bg);
+}
+
+.admin-user-item.header {
+    background-color: var(--border-color);
+    font-weight: 600;
+}
+
+.admin-user-item span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.user-action-btn {
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.user-action-btn:hover {
+    opacity: 0.8;
+}
+
+.ban-btn {
+    background-color: var(--error-color);
+    color: var(--text-light);
+}
+
+.role-btn {
+    background-color: var(--standout-color);
+    color: var(--text-light);
+}
+.unban-btn {
+    background-color: var(--success-color);
+    color: var(--text-light);
+}
+
+/* 1. Update the main item grid to have two columns: one for info, one for actions */
+.admin-user-item {
+    display: grid;
+    /* UPDATED: from four columns to two main columns */
+    grid-template-columns: 3fr 1fr;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: var(--bg-color);
+}
+
+/* 2. Define the grid for our new text wrapper */
+.user-info-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr 0.5fr 1fr; 
+    gap: 1rem;
+    align-items: center;
+}
+
+/* 3. Apply styles ONLY to the banned user row and its text wrapper */
+.admin-user-item.banned-user {
+    opacity: 0.6;
+    background-color: color-mix(in srgb, var(--error-color) 20%, transparent);
+}
+.admin-user-item.banned-user .user-info-wrapper {
+    text-decoration: line-through;
+}
+.remove-admin-btn {
+    background-color: var(--priority-medium);
+    color: var(--text-light);
+}
+
+/* Add this new rule to your CSS file */
+.chart-container {
+    position: relative;
+    height: 400px; /* This gives the chart a fixed height */
+    width: 100%;
+}
+
+/* Styling for the new profile photo wrapper */
+/* This is the main container for the photo */
+.profile-photo-wrapper {
+    position: relative;
+    display: flex; 
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    /* Ensures the wrapper fits the image size perfectly */
+    width: fit-content;
+    height: fit-content;
+    transition: box-shadow 0.3s ease;
+}
+
+/* This is the image tag itself inside the wrapper */
+.profile-photo-wrapper img {
+    border-radius: 50%;
+    display: block; /* Removes any extra space below the image */
+}
+
+/* This is the premium gradient ring effect */
+.profile-photo-wrapper.premium-ring {
+    padding: 3px; /* This controls the thickness of the ring */
+    background: linear-gradient(35deg,#8ecae6, #219ebc, #023047, #ffb703, #fb8500);
+}

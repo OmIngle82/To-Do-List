@@ -20,10 +20,13 @@
                 <a href="#" id="signin-link" class="nav-link">Sign In</a>
                 <a href="#" id="signup-link" class="nav-link">Sign Up</a>
                 <div id="profile-menu" class="profile-menu hide">
-                    <img src="https://placehold.co/40x40/EFEFEF/333?text=P" alt="Profile" id="menu-profile-photo" class="menu-profile-photo">
+                    <div id="menuProfilePhotoContainer" class="profile-photo-wrapper">
+                        <img src="https://placehold.co/40x40/EFEFEF/333?text=P" alt="Profile" id="menu-profile-photo" class="menu-profile-photo">
+                    </div>
                     <div class="profile-dropdown">
                         <a href="#" id="profile-link" class="dropdown-link">View Profile</a>
                         <a href="#" id="analytics-link" class="dropdown-link">Analytics</a>
+                        <a href="#" id="admin-link" class="dropdown-link hide">Admin Panel</a>
                         <a href="#" id="logout-btn" class="dropdown-link">Sign Out</a>
                     </div>
                 </div>
@@ -58,7 +61,9 @@
                 <p id="profile-feedback" class="feedback"></p>
                 <form id="profile-form">
                     <div class="profile-photo-section">
-                        <img src="https://placehold.co/100x100/EFEFEF/333?text=Photo" alt="Profile photo preview" id="profile-photo-preview" class="profile-photo-preview">
+                        <div id="profilePhotoContainer" class="profile-photo-wrapper">
+                            <img src="https://placehold.co/100x100/EFEFEF/333?text=Photo" alt="Profile photo preview" id="profile-photo-preview" class="profile-photo-preview">
+                        </div>
                         <input type="file" id="profile-photo-input" accept="image/*">
                         <label for="profile-photo-input" class="photo-upload-btn">Change Photo</label>
                     </div>
@@ -121,6 +126,11 @@
                         </div>
                     </div>
                     <div class="settings-section">
+                        <h3>Subscription</h3>
+                        <p id="subscription-status">You are currently on the Free Plan.</p>
+                        <button type="button" id="upgrade-to-premium-btn" class="settings-btn standout-btn">Upgrade to Premium</button>
+                    </div>
+                    <div class="settings-section">
                         <div class="settings-section-header">
                             <h3><i class="fas fa-trophy"></i> Achievements</h3>
                             <button type="button" id="reset-achievements-btn" class="settings-btn danger-btn">Reset Achievements</button>
@@ -142,6 +152,21 @@
                 <div class="report-section">
                     <h3>Weekly Report</h3>
                     <p>Tasks completed this week: <strong id="weekly-completed-count">0</strong></p>
+                </div>
+            </section>
+            <section id="admin-page" class="page hide">
+                <h2 class="form-title">👑 Admin Panel</h2>
+                <div class="settings-section">
+                    <h3>User Management</h3>
+                    <div id="user-list-container">
+                        <p>Loading users...</p>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>Usage Analytics</h3>
+                    <div id="analytics-container">
+                        <p>Loading analytics data...</p>
+                    </div>
                 </div>
             </section>
             <section id="todo-page" class="page hide">
@@ -385,9 +410,12 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-functions-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-messaging-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script src="script.js"></script>
     <script src="ai-suggestions.js"></script>
     <script src="teammode.js"></script>
