@@ -1212,3 +1212,7 @@ body.team-mode .simple-mode-only {
     padding: 3px; /* This controls the thickness of the ring */
     background: linear-gradient(35deg,#8ecae6, #219ebc, #023047, #ffb703, #fb8500);
 }
+
+#admin-user-filters {
+    margin-bottom: 1.5rem;
+}

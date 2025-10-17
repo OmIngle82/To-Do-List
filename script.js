@@ -95,7 +95,8 @@ const accentColors = ['#d4a373', '#f07167', '#00afb9', '#9d4edd', '#fb8500'];
 let conversationCreationLocks = new Map();
 let isPostingComment = false;
 let activeListenerToken = null; 
-let lastCommentTime = 0; 
+let lastCommentTime = 0;
+let currentAdminFilter = 'all'; // Can be 'all', 'admin', 'premium', or 'free' 
 const ALL_BADGES = [
     {
         id: 'first_strike',
@@ -877,6 +878,30 @@ const loadUsersForAdmin = async () => {
             return;
         }
 
+        // --- FILTERING LOGIC STARTS HERE ---
+        const allAdminUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        let filteredUsers;
+
+        switch (currentAdminFilter) {
+            case 'admin':
+                filteredUsers = allAdminUsers.filter(user => user.role === 'admin');
+                break;
+            case 'premium':
+                filteredUsers = allAdminUsers.filter(user => user.subscription?.status === 'premium');
+                break;
+            case 'free':
+                filteredUsers = allAdminUsers.filter(user => user.role !== 'admin' && user.subscription?.status !== 'premium');
+                break;
+            default: // 'all'
+                filteredUsers = allAdminUsers;
+        }
+        // --- FILTERING LOGIC ENDS HERE ---
+
+        if (filteredUsers.length === 0) {
+            userListContainer.innerHTML = `<p>No users match the current filter.</p>`;
+            return;
+        }
+
         let usersHTML = `
             <div class="admin-user-list">
                 <div class="admin-user-item header">
@@ -892,14 +917,13 @@ const loadUsersForAdmin = async () => {
                 </div>
         `;
 
-        snapshot.docs.forEach(doc => {
-            const user = { id: doc.id, ...doc.data() };
+        // Loop through the FILTERED users instead of all docs
+        filteredUsers.forEach(user => {
             const isBanned = user.status === 'banned';
-            const isAdmin = user.role === 'admin'; // This line was missing
+            const isAdmin = user.role === 'admin';
 
             const itemClass = isBanned ? 'admin-user-item banned-user' : 'admin-user-item';
             
-            // This variable was named incorrectly in your file
             const banButton = isBanned 
                 ? `<button class="user-action-btn unban-btn">Unban</button>`
                 : `<button class="user-action-btn ban-btn">Ban</button>`;
@@ -922,7 +946,6 @@ const loadUsersForAdmin = async () => {
                     </div>
                 </div>`;
         });    
-
 
         usersHTML += `</div>`;
         userListContainer.innerHTML = usersHTML;
@@ -2063,6 +2086,22 @@ document.addEventListener('click', async (e) => {
             e.target.textContent = 'Upgrade to Premium';
             e.target.disabled = false;
         }
+    }
+});
+
+// --- NEW: Event listener for admin user filters ---
+const adminUserFilters = document.getElementById('admin-user-filters');
+adminUserFilters?.addEventListener('click', (e) => {
+    if (e.target.matches('.filter-btn')) {
+        // Update the active button style
+        adminUserFilters.querySelector('.active').classList.remove('active');
+        e.target.classList.add('active');
+        
+        // Update the state variable
+        currentAdminFilter = e.target.dataset.filter;
+        
+        // Reload the user list with the new filter
+        loadUsersForAdmin();
     }
 });
 

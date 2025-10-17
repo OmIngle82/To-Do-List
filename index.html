@@ -155,9 +155,15 @@
                 </div>
             </section>
             <section id="admin-page" class="page hide">
-                <h2 class="form-title">👑 Admin Panel</h2>
+                <h2 class="form-title">Admin Panel</h2>
                 <div class="settings-section">
                     <h3>User Management</h3>
+                    <div id="admin-user-filters" class="filters">
+                        <button class="filter-btn active" data-filter="all">All Users</button>
+                        <button class="filter-btn" data-filter="admin">Admins</button>
+                        <button class="filter-btn" data-filter="premium">Premium Users</button>
+                        <button class="filter-btn" data-filter="free">Free Users</button>
+                    </div>
                     <div id="user-list-container">
                         <p>Loading users...</p>
                     </div>
