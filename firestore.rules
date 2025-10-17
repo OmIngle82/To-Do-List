@@ -15,8 +15,10 @@ service cloud.firestore {
         // Rules for sharing/assigning tasks
         allow create: if request.auth.uid != null &&
                       request.auth.uid != userId &&
+                      // NEW: Check if the person SENDING the task is a premium user
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.status == 'premium' &&
                       (request.resource.data.sharedBy.uid == request.auth.uid ||
-                       request.resource.data.assignedBy.uid == request.auth.uid);
+                      request.resource.data.assignedBy.uid == request.auth.uid);
         allow update: if request.auth.uid != null &&
                        request.auth.uid != userId &&
                        request.auth.uid == resource.data.assignedTo.uid &&
@@ -48,7 +50,9 @@ service cloud.firestore {
     match /slackIntegrations/{slackId} {
       // Allow a logged-in user to create a document linking their own account.
       allow write: if request.auth.uid != null &&
-                      request.resource.data.firestoreUserId == request.auth.uid;
+                    request.resource.data.firestoreUserId == request.auth.uid &&
+                    // NEW: Check if the user linking their account is premium
+                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.status == 'premium';
     }
     match /system_analytics/{docId} {
       allow read: if request.auth.token.role == 'admin';

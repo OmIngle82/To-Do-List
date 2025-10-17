@@ -155,6 +155,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // This listener handles the automatic categorization and schedule suggestions.
     taskInput.addEventListener('keyup', (e) => {
+        // --- NEW PREMIUM CHECK ---
+        // Make sure the function exists and the user is premium
+        if (typeof isPremiumUser !== 'function' || !isPremiumUser()) {
+            aiSuggestionBox.innerHTML = ''; // Ensure suggestion box is empty for free users
+            aiSuggestionBox.style.display = 'none';
+            return; // Stop processing for non-premium users
+        }
+        // --- END OF CHECK ---
         const text = e.target.value;
 
         // 1. Handle Automatic Categorization

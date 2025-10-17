@@ -18,9 +18,15 @@ service firebase.storage {
 
     // Rules for NEW shared task attachments
     match /task_attachments/shared/{conversationId}/{fileName} {
-      allow read, write: if request.auth.uid != null && isAuthorizedForConversation(conversationId)
-                          // Granular size validation (10MB limit)
-                          && request.resource.size < 10 * 1024 * 1024
+      // Anyone in the conversation can read attachments
+      allow read: if request.auth.uid != null && isAuthorizedForConversation(conversationId);
+      
+      // ONLY premium users can write (upload) new attachments
+      allow write: if request.auth.uid != null 
+                  && isAuthorizedForConversation(conversationId)
+                  && isPremiumUser(request.auth.uid) // <-- NEW PREMIUM CHECK
+                  // Granular size validation (10MB limit)
+                  && request.resource.size < 10 * 1024 * 1024
                           // Enhanced content type matching for broader compatibility
                           && request.resource.contentType.matches('image/.*|video/.*|application/pdf|application/zip|application/msword|text/plain|application/vnd.ms-excel|application/vnd.ms-powerpoint|application/vnd.openxmlformats-officedocument.*');
     }

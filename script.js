@@ -484,6 +484,18 @@ const handleSlackLinking = () => {
                     };
                     return; // Stop here until they are logged in
                 }
+                // --- NEW PREMIUM CHECK ---
+                if (!isPremiumUser()) {
+                    instructionsEl.textContent = "Slack Integration is a premium feature. Please upgrade your account to connect with Slack.";
+                    showFeedback(feedbackEl, "Upgrade required", "error");
+                    linkBtn.textContent = "Upgrade to Premium";
+                    // Make the button take them to the profile page to upgrade
+                    linkBtn.onclick = () => {
+                        window.location.href = window.location.origin + window.location.pathname + '#profile';
+                    };
+                    return; // Stop the linking process
+                }
+                // --- END OF CHECK ---
 
                 // If we get here, the user is logged in
                 linkBtn.disabled = true;
@@ -1095,6 +1107,26 @@ const hideAchievementModal = () => {
 };
 
 // --- Modal Functions --- //
+const upgradeModal = document.getElementById('upgrade-modal');
+const upgradeConfirmBtn = document.getElementById('upgrade-modal-confirm');
+const upgradeCancelBtn = document.getElementById('upgrade-modal-cancel');
+
+const openUpgradeModal = () => {
+    if (upgradeModal) upgradeModal.classList.remove('hide');
+};
+
+const closeUpgradeModal = () => {
+    if (upgradeModal) upgradeModal.classList.add('hide');
+};
+
+upgradeConfirmBtn?.addEventListener('click', () => {
+    closeUpgradeModal();
+    showPage('profile-page'); // Take user to profile to see subscription options
+    // Optional: scroll to the subscription section
+    document.getElementById('subscription-status')?.scrollIntoView({ behavior: 'smooth' });
+});
+
+upgradeCancelBtn?.addEventListener('click', closeUpgradeModal);
 const openTaskModal = (task = null) => {
     if (!taskModal) return;
 
@@ -1876,6 +1908,11 @@ const setupNotifications = () => {
 
 
 // --- Utility Functions --- //
+const isPremiumUser = () => {
+    // Use optional chaining (?.) to safely check for nested properties.
+    // This prevents errors if a user has no subscription object at all.
+    return currentUserProfile?.subscription?.status === 'premium';
+};
 function shadeColor(color, percent) {
     let [R,G,B] = [parseInt(color.substring(1,3),16), parseInt(color.substring(3,5),16), parseInt(color.substring(5,7),16)];
     R = parseInt(R * (100 + percent) / 100); G = parseInt(G * (100 + percent) / 100); B = parseInt(B * (100 + percent) / 100);
@@ -2482,6 +2519,12 @@ adminUserFilters?.addEventListener('click', (e) => {
 
     modeToggle?.addEventListener('change', (e) => {
         const isTeamMode = e.target.checked;
+        if (isTeamMode && !isPremiumUser()) {
+            e.preventDefault(); // Stop the toggle switch
+            e.target.checked = false; // Visually revert the switch
+            openUpgradeModal(); // Show the upgrade modal
+            return; // Exit the function
+        }
         if (isTeamMode) {
             if (typeof initTeamMode === 'function') initTeamMode();
             else console.error("teammode.js functions not loaded.");
