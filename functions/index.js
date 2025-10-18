@@ -355,16 +355,33 @@ exports.createRazorpaySubscription = onCall({ cors: true }, async (request) => {
         throw new HttpsError('unauthenticated', 'You must be logged in.');
     }
 
+    // --- NEW: Define your Plan IDs here ---
+    const MONTHLY_PLAN_ID = "plan_RSWaZTkYUrIetL"; //  monthly Plan ID
+    const YEARLY_PLAN_ID = "plan_RUb4JkF1DNi4be"; // <-- yearly Plan ID 
+
     const razorpay = new Razorpay({
-        key_id: process.env.RAZORPAY_KEY_ID,         // This is the fix
-        key_secret: process.env.RAZORPAY_KEY_SECRET   // This is the fix
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET
     });
 
+    // Get the user's choice from the data sent by the frontend
+    const planType = request.data.planType;
+    let selectedPlanId;
+
+    if (planType === 'yearly') {
+        selectedPlanId = YEARLY_PLAN_ID;
+    } else if (planType === 'monthly') {
+        selectedPlanId = MONTHLY_PLAN_ID;
+    } else {
+        // If the planType is invalid, throw an error
+        throw new HttpsError('invalid-argument', 'A valid plan type (monthly or yearly) must be provided.');
+    }
+    
     try {
         const subscription = await razorpay.subscriptions.create({
-            plan_id: "plan_RSWaZTkYUrIetL", // Your Plan ID
+            plan_id: selectedPlanId, // Use the selected plan ID
             customer_notify: 1,
-            total_count: 12,
+            total_count: planType === 'yearly' ? 1 : 12, // Set total cycles
             notes: {
                 firebase_uid: request.auth.uid
             }

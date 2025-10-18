@@ -2082,19 +2082,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 document.addEventListener('click', async (e) => {
-    if (e.target.matches('#upgrade-to-premium-btn')) {
+    // Check if a plan selection button was clicked
+    if (e.target.matches('.plan-select-btn')) {
+        const planType = e.target.dataset.plan; // 'monthly' or 'yearly'
         e.target.textContent = 'Opening checkout...';
         e.target.disabled = true;
 
         try {
-            // 1. Call the backend function to create a subscription
+            // 1. Call the backend function, now PASSING the selected plan
             const createRazorpaySubscription = firebase.functions().httpsCallable('createRazorpaySubscription');
-            const { data } = await createRazorpaySubscription();
+            const { data } = await createRazorpaySubscription({ planType: planType });
 
             const options = {
-                key: "rzp_test_RSSlg4Qv0KAHrY", //  PASTE YOUR rzp_test_... KEY ID HERE
+                key: "rzp_test_RSSlg4Qv0KAHrY",
                 subscription_id: data.subscriptionId,
-                name: "Task Manager - Premium Plan",
+                name: `Task Manager - ${planType.charAt(0).toUpperCase() + planType.slice(1)} Plan`,
                 description: "Unlock all premium features",
                 handler: function (response){
                     alert("Payment successful! Your account will be upgraded shortly.");
@@ -2120,7 +2122,7 @@ document.addEventListener('click', async (e) => {
             console.error("Razorpay Checkout error:", error);
             alert('Could not initiate checkout. Please try again.');
         } finally {
-            e.target.textContent = 'Upgrade to Premium';
+            e.target.textContent = `Choose ${planType.charAt(0).toUpperCase() + planType.slice(1)}`;
             e.target.disabled = false;
         }
     }

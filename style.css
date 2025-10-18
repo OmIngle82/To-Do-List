@@ -1216,3 +1216,83 @@ body.team-mode .simple-mode-only {
 #admin-user-filters {
     margin-bottom: 1.5rem;
 }
+
+/* new styles for the plan selection */
+#plan-selection-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.plan-card {
+    border: 2px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.plan-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--box-shadow);
+}
+
+.plan-card.featured {
+    border-color: var(--standout-color);
+}
+
+.featured-badge {
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--standout-color);
+    color: var(--text-light);
+    padding: 0.3rem 0.8rem;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.plan-card h4 {
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+}
+
+.plan-card .price {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+.plan-card .price span {
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--completed-color);
+}
+
+.plan-card .description {
+    font-size: 0.9rem;
+    color: var(--completed-color);
+    margin-bottom: 1.5rem;
+    min-height: 40px;
+}
+
+.plan-select-btn {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.plan-select-btn:hover {
+    background-color: var(--primary-hover);
+}
