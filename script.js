@@ -2127,6 +2127,23 @@ document.addEventListener('click', async (e) => {
         }
     }
 });
+// --- NEW: Event listener for showing feature comparison ---
+const showComparisonBtn = document.getElementById('show-comparison-btn');
+const featureComparisonContainer = document.getElementById('feature-comparison-container');
+
+showComparisonBtn?.addEventListener('click', () => {
+    const isHidden = featureComparisonContainer.classList.contains('hide');
+    
+    // Toggle the visibility of the container
+    featureComparisonContainer.classList.toggle('hide');
+
+    // Update the button text based on the state
+    if (isHidden) {
+        showComparisonBtn.textContent = 'Hide Comparison';
+    } else {
+        showComparisonBtn.textContent = 'Why Choose Premium?';
+    }
+});
 
 // --- NEW: Event listener for admin user filters ---
 const adminUserFilters = document.getElementById('admin-user-filters');

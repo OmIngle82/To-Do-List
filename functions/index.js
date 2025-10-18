@@ -36,6 +36,17 @@ exports.emailToTaskWebhook = onRequest(async (req, res) => {
     }
     const userDoc = querySnapshot.docs[0];
     const userId = userDoc.id;
+    const userData = userDoc.data(); // Get the user's data
+
+    // --- NEW: PREMIUM CHECK ---
+    if (userData.subscription?.status !== 'premium') {
+        console.log(`Blocked email-to-task attempt from non-premium user: ${fromAddress}`);
+        // Respond with a 403 Forbidden status to indicate a permission issue.
+        // The email service will typically not retry on a 403 error.
+        res.status(403).send("Forbidden: This feature is for premium users only.");
+        return;
+    }
+    // --- END OF CHECK ---
 
     const userTasksRef = admin.firestore()
         .collection("users").doc(userId).collection("tasks");

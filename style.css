@@ -1296,3 +1296,99 @@ body.team-mode .simple-mode-only {
 .plan-select-btn:hover {
     background-color: var(--primary-hover);
 }
+
+/* --- NEW STYLES FOR FEATURE COMPARISON --- */
+
+/* Button to show/hide the comparison */
+.comparison-toggle-container {
+    text-align: center;
+    margin-top: 1.5rem;
+}
+
+.comparison-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 0.9rem;
+}
+
+/* Main container for the comparison table */
+#feature-comparison-container {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    animation: fadeIn 0.5s ease; /* Simple fade-in animation */
+}
+
+.comparison-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.plan-column {
+    background-color: var(--bg-color);
+    padding: 1.5rem;
+    border-radius: 10px;
+}
+
+.plan-column.premium {
+    border: 2px solid var(--standout-color);
+}
+
+.plan-column h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.75rem;
+}
+
+.plan-column ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.plan-column li {
+    padding-left: 1.5rem;
+    position: relative;
+    margin-bottom: 0.75rem;
+}
+
+/* Add checkmark/star icons to list items */
+.plan-column li::before {
+    position: absolute;
+    left: 0;
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    color: var(--success-color);
+    content: '\f00c'; /* Checkmark icon */
+}
+
+.plan-column.premium li::before {
+    color: var(--standout-color);
+    content: '\f005'; /* Star icon */
+}
+
+/* Styling for the nested integration details */
+.integration-details {
+    margin-top: 0.5rem;
+    padding-left: 1rem;
+}
+
+.integration-details li::before {
+    content: '\f111'; /* Small circle icon */
+    font-size: 0.5rem;
+    vertical-align: middle;
+}
+
+/* Style for the code/email parts */
+.integration-details code {
+    background-color: var(--border-color);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-family: monospace;
+}
