@@ -181,6 +181,39 @@ body.dark-theme[data-palette="sakura"] {
     --team-color: #00afb9;
     --assign-color: #9d4edd;
 }
+/* --- DARK MODE CONTRAST FIXES --- */
+
+/* Target buttons using --primary-color */
+body.dark-theme .auth-btn,
+body.dark-theme .photo-upload-btn,
+body.dark-theme .settings-btn, /* Includes export buttons */
+body.dark-theme .layout-switcher label:has(input:checked),
+body.dark-theme .plan-select-btn,
+body.dark-theme .comment-submit-btn,
+body.dark-theme .subtask-add-btn,
+body.dark-theme .modal-btn.save-btn, /* Includes upgrade modal confirm */
+body.dark-theme .calendar-mode-toggle .toggle-btn.active,
+body.dark-theme .filter-btn.active,
+body.dark-theme .filter-btn:hover {
+    color: var(--bg-color); /* Use the dark background color for high contrast text */
+}
+
+/* Target buttons using --standout-color */
+body.dark-theme .add-task-btn {
+     color: var(--bg-color);
+}
+
+/* Ensure icons within these buttons also change color */
+body.dark-theme .add-task-btn i,
+body.dark-theme .comment-submit-btn i,
+body.dark-theme .subtask-add-btn i {
+     color: var(--bg-color);
+}
+
+/* Fix active color swatch border in dark mode */
+body.dark-theme .color-swatch.active {
+    border-color: #f0f0f0; /* Use a light gray border */
+}
 
 /* Basic Reset */
 * {
@@ -1010,6 +1043,7 @@ body.team-mode .simple-mode-only {
 .danger-btn:hover {
     background-color: var(--error-color);
     color: var(--text-light);
+    transition: 0.5s;
 }
 
 /* --- Offline Indicator --- */
@@ -1391,4 +1425,26 @@ body.team-mode .simple-mode-only {
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
     font-family: monospace;
+}
+
+/* --- RESPONSIVE FIX FOR COMPARISON SECTION --- */
+@media (max-width: 768px) {
+    .comparison-grid {
+        grid-template-columns: 1fr; /* Stack columns vertically */
+    }
+    #plan-selection-container {
+        grid-template-columns: 1fr; /* Stack plan cards */
+    }
+}
+
+/* --- DARK MODE CONTRAST FIX FOR DANGER BUTTON --- */
+
+body.dark-theme .danger-btn {
+    color: var(--error-color);
+    border-color: var(--error-color); 
+}
+
+body.dark-theme .danger-btn:hover {
+    background-color: var(--error-color);
+    color: var(--app-bg);
 }

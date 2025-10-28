@@ -2098,6 +2098,11 @@ document.addEventListener('click', async (e) => {
                 subscription_id: data.subscriptionId,
                 name: `Task Manager - ${planType.charAt(0).toUpperCase() + planType.slice(1)} Plan`,
                 description: "Unlock all premium features",
+                method: {
+                    card: true, // Keep card enabled
+                    upi: true,   // Explicitly enable the UPI tab for mandates
+                    netbanking: true
+                },
                 handler: function (response){
                     alert("Payment successful! Your account will be upgraded shortly.");
                     console.log("Razorpay Response:", response);
