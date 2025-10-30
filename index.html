@@ -68,7 +68,10 @@
                         <label for="profile-photo-input" class="photo-upload-btn">Change Photo</label>
                     </div>
                     <div class="form-group">
-                        <label for="profile-name">Display Name</label>
+                        <div class="label-with-badge">
+                            <label for="profile-name">Display Name</label>
+                            <span id="yearly-premium-badge" class="premium-plus-badge hide">Premium Plus ✨</span>
+                        </div>
                         <input type="text" id="profile-name" placeholder="Enter your name">
                     </div>
 
@@ -120,9 +123,9 @@
                         <h3>Smart Features</h3>
                         <div class="settings-btn-container">
                             <button type="button" id="enable-notifications-btn" class="settings-btn">Enable Reminders</button>
-                            <button type="button" id="connect-google-calendar-btn" class="settings-btn">
-                                <i class="fab fa-google" style="margin-right: 8px;"></i>Connect Google Calendar
-                            </button>
+                        <button type="button" id="connect-google-calendar-btn" class="settings-btn">
+                            <i class="fab fa-google" style="margin-right: 8px;"></i>Connect Google Calendar
+                        </button>
                         </div>
                     </div>
                     <div class="settings-section">
@@ -132,14 +135,14 @@
                     <div id="plan-selection-container">
                         <div class="plan-card">
                             <h4>Monthly Plan</h4>
-                            <p class="price">₹100<span>/month</span></p>
+                            <p class="price">₹99<span>/month</span></p>
                             <p class="description">Standard monthly access to all premium features.</p>
                             <button class="plan-select-btn" data-plan="monthly">Choose Monthly</button>
                         </div>
                         <div class="plan-card featured">
-                            <span class="featured-badge">Save 8.42%</span>
+                            <span class="featured-badge">Save 15.91%</span>
                             <h4>Yearly Plan</h4>
-                            <p class="price">₹1099<span>/year</span></p>
+                            <p class="price">₹999<span>/year</span></p>
                             <p class="description">Get a full year of premium access and save money.</p>
                             <button class="plan-select-btn" data-plan="yearly">Choose Yearly</button>
                         </div>
@@ -178,6 +181,12 @@
                             </div>
                         </div>
                     </div>
+                    <div id="priority-support-section" class="settings-section hide">
+                        <h3><i class="fas fa-headset"></i> Priority Support</h3>
+                        <p>As a Yearly Premium member, you have access to priority support.</p>
+                        <p>Contact us at: <strong>support-premium@taskmanager.app</strong> (Please mention your account email).</p>
+                        <p><small>We aim to respond to priority requests within 4 business hours.</small></p>
+                    </div>
                     </div>
                     <div class="settings-section">
                         <div class="settings-section-header">
@@ -190,40 +199,67 @@
                     <button type="submit" class="auth-btn">Save Profile</button>
                 </form>
             </section>
-            <section id="analytics-page" class="page hide">
+           <section id="analytics-page" class="page hide">
                 <h2 class="form-title">Your Analytics & Reports</h2>
                 
-                <div class="report-section">
-                    <h3>Daily Report</h3>
-                    <p>Tasks completed today: <strong id="daily-completed-count">0</strong></p>
-                </div>
-
-                <div class="report-section">
-                    <h3>Weekly Report</h3>
-                    <p>Tasks completed this week: <strong id="weekly-completed-count">0</strong></p>
-                </div>
+                <div id="personal-analytics-container">
+                    <div class="report-section">
+                        <h3>Daily Report</h3>
+                        <p>Tasks completed today: <strong id="daily-completed-count">0</strong></p>
+                    </div>
+                    <div class="report-section">
+                        <h3>Weekly Report</h3>
+                        <p>Tasks completed this week: <strong id="weekly-completed-count">0</strong></p>
+                    </div>
+                    </div>
             </section>
             <section id="admin-page" class="page hide">
                 <h2 class="form-title">Admin Panel</h2>
-                <div class="settings-section">
-                    <h3>User Management</h3>
-                    <div id="admin-user-filters" class="filters">
-                        <button class="filter-btn active" data-filter="all">All Users</button>
-                        <button class="filter-btn" data-filter="admin">Admins</button>
-                        <button class="filter-btn" data-filter="premium">Premium Users</button>
-                        <button class="filter-btn" data-filter="free">Free Users</button>
-                    </div>
-                    <div id="user-list-container">
-                        <p>Loading users...</p>
+
+                <div class="admin-nav">
+                    <button id="admin-nav-users" class="admin-nav-btn active" data-target="admin-users-content">
+                        <i class="fas fa-users"></i> User Data
+                    </button>
+                    <button id="admin-nav-analytics" class="admin-nav-btn" data-target="admin-analytics-content">
+                        <i class="fas fa-chart-line"></i> Analytics
+                    </button>
+                </div>
+
+                <div id="admin-users-content" class="admin-content-panel">
+                    <div class="settings-section">
+                        <h3>User Management</h3>
+                        <div id="admin-user-filters" class="filters">
+                            <button class="filter-btn active" data-filter="all">All Users</button>
+                            <button class="filter-btn" data-filter="admin">Admins</button>
+                            <button class="filter-btn" data-filter="premium">Premium Users</button>
+                            <button class="filter-btn" data-filter="free">Free Users</button>
+                        </div>
+                        <div id="user-list-container">
+                            <p>Loading users...</p>
+                        </div>
                     </div>
                 </div>
-                <div class="settings-section">
-                    <h3>Usage Analytics</h3>
-                    <div id="analytics-container">
-                        <p>Loading analytics data...</p>
+
+                <div id="admin-analytics-content" class="admin-content-panel hide">
+                    <div class="settings-section">
+                        <h3>Usage Analytics</h3>
+                        <div id="analytics-container">
+                            <p>Loading analytics data...</p>
+                        </div>
                     </div>
                 </div>
             </section>
+
+            <div id="user-detail-modal" class="modal-overlay hide">
+                <div class="modal-content">
+                    <div class="detail-modal-header">
+                        <h2 id="user-detail-name">User Details</h2>
+                        <button id="user-detail-close-btn" class="detail-close-btn">&times;</button>
+                    </div>
+                    <div id="user-detail-body" class="detail-modal-body">
+                        </div>
+                </div>
+            </div>
             <section id="todo-page" class="page hide">
                 <div class="todo-header">
                     <div class="top-bar">

@@ -20,10 +20,15 @@ service cloud.firestore {
                       (request.resource.data.sharedBy.uid == request.auth.uid ||
                       request.resource.data.assignedBy.uid == request.auth.uid);
         allow update: if request.auth.uid != null &&
-                       request.auth.uid != userId &&
-                       request.auth.uid == resource.data.assignedTo.uid &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignedTo.status', 'assignedTo.completedAt']) &&
-                       request.resource.data.assignedTo.status == 'completed';
+                      request.auth.uid != userId &&
+                      request.auth.uid == resource.data.assignedTo.uid && // User is the assignee
+                      resource.data.assignedTo.status == 'pending' && // Old status must be 'pending'
+                      request.resource.data.assignedTo.status == 'completed' && // New status must be 'completed'
+                      request.resource.data.assignedTo.completedAt != null && // A 'completed' timestamp must be set
+                      // Check that nothing else on the task was changed
+                      request.resource.data.text == resource.data.text &&
+                      request.resource.data.priority == resource.data.priority &&
+                      request.resource.data.category == resource.data.category;
       }
     }
 

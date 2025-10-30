@@ -2,10 +2,14 @@
 // Use the new v2 syntax for Cloud Functions
 const {onRequest, onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {onObjectFinalized, onObjectDeleted} = require("firebase-functions/v2/storage");
 const Razorpay = require('razorpay');
 
 const admin = require("firebase-admin");
 admin.initializeApp();
+
+const MONTHLY_PLAN_ID = "plan_RZGPfzNRtiYgG0";
+const YEARLY_PLAN_ID = "plan_RZGREjjDG6aftY";   
 
 // --- FUNCTION 1: Email-to-Task Webhook (Updated to v2 syntax) ---
 exports.emailToTaskWebhook = onRequest(async (req, res) => {
@@ -367,8 +371,8 @@ exports.createRazorpaySubscription = onCall({ cors: true }, async (request) => {
     }
 
     // --- NEW: Define your Plan IDs here ---
-    const MONTHLY_PLAN_ID = "plan_RSWaZTkYUrIetL"; //  monthly Plan ID
-    const YEARLY_PLAN_ID = "plan_RUb4JkF1DNi4be"; // <-- yearly Plan ID 
+    const MONTHLY_PLAN_ID = "plan_RZGPfzNRtiYgG0"; //  monthly Plan ID
+    const YEARLY_PLAN_ID = "plan_RZGREjjDG6aftY"; // <-- yearly Plan ID 
 
     const razorpay = new Razorpay({
         key_id: process.env.RAZORPAY_KEY_ID,
@@ -445,4 +449,287 @@ exports.razorpayWebhook = onRequest(async (req, res) => {
     console.error("Error processing Razorpay webhook:", error);
     return res.status(500).send("Webhook processing error.");
   }
+});
+
+// --- FUNCTION 10: Securely Share or Assign Tasks with Limits ---
+const SHARE_ASSIGN_LIMIT_MONTHLY = 20; // Define the limit for monthly users
+
+exports.shareOrAssignTasks = onCall(async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+        throw new HttpsError('unauthenticated', 'You must be logged in.');
+    }
+
+    // --- 1. Get Input Data ---
+    const { recipientEmail, taskIds, action } = request.data; // action is 'share' or 'assign'
+    if (!recipientEmail || !Array.isArray(taskIds) || taskIds.length === 0 || !['share', 'assign'].includes(action)) {
+        throw new HttpsError('invalid-argument', 'Missing or invalid parameters.');
+    }
+    if (taskIds.length > SHARE_ASSIGN_LIMIT_MONTHLY) {
+         throw new HttpsError('invalid-argument', `You cannot ${action} more than ${SHARE_ASSIGN_LIMIT_MONTHLY} tasks at once.`);
+    }
+
+    const db = admin.firestore();
+    const callerRef = db.collection('users').doc(callerUid);
+    const batch = db.batch(); // Use Firestore batch for atomic operations
+
+    try {
+        // --- 2. Get Caller and Recipient Info ---
+        const callerDoc = await callerRef.get();
+        if (!callerDoc.exists) throw new HttpsError('not-found', 'Caller user document not found.');
+        const callerData = callerDoc.data();
+        const callerName = callerData.displayName || callerData.email.split('@')[0];
+
+        const recipientQuery = await db.collection('users').where('email', '==', recipientEmail.trim().toLowerCase()).limit(1).get();
+        if (recipientQuery.empty) throw new HttpsError('not-found', 'Recipient user not found.');
+        const recipientDoc = recipientQuery.docs[0];
+        const recipientUid = recipientDoc.id;
+        const recipientData = recipientDoc.data();
+        const recipientName = recipientData.displayName || recipientEmail.split('@')[0];
+
+        if (callerUid === recipientUid) throw new HttpsError('invalid-argument', 'You cannot send tasks to yourself.');
+
+        // --- 3. Check Subscription & Limits ---
+        const subscriptionStatus = callerData.subscription?.status;
+        const planId = callerData.subscription?.planId;
+        const isYearly = planId === YEARLY_PLAN_ID;
+
+        let currentCount = callerData.teamUsage?.sharedAssignedCount || 0;
+        let resetDate = callerData.teamUsage?.resetDate?.toDate();
+        const now = new Date();
+        let needsUsageUpdate = false;
+
+        // Reset count if reset date has passed
+        if (resetDate && now >= resetDate) {
+            currentCount = 0;
+            resetDate = null; // Will be reset below
+            needsUsageUpdate = true;
+        }
+
+        // Set next reset date if not already set (e.g., first use or after reset)
+        if (!resetDate) {
+            resetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1); // 1st of next month
+            needsUsageUpdate = true;
+        }
+
+        // Enforce limit only for non-yearly premium users
+        if (subscriptionStatus === 'premium' && !isYearly) {
+            if (currentCount + taskIds.length > SHARE_ASSIGN_LIMIT_MONTHLY) {
+                throw new HttpsError('permission-denied', `Monthly limit (${SHARE_ASSIGN_LIMIT_MONTHLY} shares/assigns) reached. Upgrade to yearly or wait until ${resetDate.toLocaleDateString()}.`);
+            }
+            // Prepare to update count
+            currentCount += taskIds.length;
+            needsUsageUpdate = true;
+        } else if (subscriptionStatus !== 'premium') {
+             // Block free users entirely (redundant with frontend/rules, but good practice)
+             throw new HttpsError('permission-denied', 'Team collaboration requires a premium subscription.');
+        }
+         // Yearly users have no limit checks
+
+        // --- 4. Prepare Task Operations ---
+        const senderTasksRef = db.collection('users').doc(callerUid).collection('tasks');
+        const recipientTasksRef = db.collection('users').doc(recipientUid).collection('tasks');
+
+        // Fetch original tasks (ensure they exist and belong to caller)
+        const taskPromises = taskIds.map(id => senderTasksRef.doc(id).get());
+        const taskDocs = await Promise.all(taskPromises);
+        const originalTasksData = {}; // Store task data by ID
+
+        for (const doc of taskDocs) {
+            if (!doc.exists) throw new HttpsError('not-found', `Task with ID ${doc.id} not found.`);
+            const taskData = doc.data();
+            // Basic check to ensure task isn't already shared/assigned in a conflicting way
+            if (taskData.sharedBy || taskData.assignedBy || taskData.assignedTo) {
+                throw new HttpsError('failed-precondition', `Task "${taskData.text.substring(0,20)}..." is already part of a collaboration.`);
+            }
+            originalTasksData[doc.id] = taskData;
+        }
+
+        // Perform share/assign logic within the batch
+        for (const taskId of taskIds) {
+            const originalTask = originalTasksData[taskId];
+            let conversationId = originalTask.conversationId;
+
+            // Create conversation if it doesn't exist
+            if (!conversationId) {
+                const convoRef = db.collection('task_conversations').doc();
+                conversationId = convoRef.id;
+                batch.set(convoRef, { authorizedUsers: [callerUid], createdAt: admin.firestore.FieldValue.serverTimestamp() });
+                const originalTaskRef = senderTasksRef.doc(taskId);
+                batch.update(originalTaskRef, { conversationId: conversationId });
+            }
+
+            // Create the task copy for the recipient
+            const { id, ...taskDataToCopy } = originalTask; // Exclude original ID
+            const newRecipientTaskRef = recipientTasksRef.doc(); // Generate new ID
+            const recipientTaskPayload = {
+                ...taskDataToCopy,
+                conversationId: conversationId,
+                status: 'todo',
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+                // order field might need recalculation or setting based on recipient's list
+            };
+
+            if (action === 'share') {
+                recipientTaskPayload.sharedBy = { name: callerName, uid: callerUid };
+            } else { // 'assign'
+                recipientTaskPayload.assignedBy = { name: callerName, uid: callerUid };
+                recipientTaskPayload.originalTaskId = taskId;
+                recipientTaskPayload.originalAssignerUid = callerUid;
+                recipientTaskPayload.category = 'Assigned'; // Force category
+
+                // Update the original task to show it's assigned
+                const originalTaskRef = senderTasksRef.doc(taskId);
+                batch.update(originalTaskRef, {
+                    assignedTo: { name: recipientName, uid: recipientUid, status: 'pending' }
+                });
+            }
+            batch.set(newRecipientTaskRef, recipientTaskPayload);
+
+            // Add recipient to the conversation
+            const convoRef = db.collection('task_conversations').doc(conversationId);
+            batch.update(convoRef, {
+                authorizedUsers: admin.firestore.FieldValue.arrayUnion(recipientUid)
+            });
+        }
+
+        // --- 5. Update Usage Count if necessary ---
+        if (needsUsageUpdate) {
+            batch.set(callerRef, {
+                teamUsage: {
+                    sharedAssignedCount: currentCount,
+                    resetDate: admin.firestore.Timestamp.fromDate(resetDate)
+                }
+            }, { merge: true });
+        }
+
+        // --- 6. Commit Batch ---
+        await batch.commit();
+
+        return { success: true, message: `Successfully ${action === 'share' ? 'shared' : 'assigned'} ${taskIds.length} task(s).` };
+
+    } catch (error) {
+        console.error(`Error in shareOrAssignTasks function for user ${callerUid}:`, error);
+        // Rethrow HttpsError directly, wrap others
+        if (error instanceof HttpsError) {
+            throw error;
+        } else {
+            throw new HttpsError('internal', 'An unexpected error occurred while processing your request.');
+        }
+    }
+});
+
+// --- FUNCTION 11: Update Firestore Storage Usage on File Upload (v2 SYNTAX) ---
+// Triggered when a new file is successfully uploaded (finalized)
+exports.updateStorageUsageOnUpload = onObjectFinalized(async (event) => {
+    // v2 uses event.data instead of just 'object'
+    const file = event.data;
+    const fileSize = parseInt(file.size || '0'); // Size in bytes
+    const filePath = file.name; // Full path e.g., 'task_attachments/shared/convId/file.jpg'
+
+    // Ignore directories or files without size
+    if (!filePath || fileSize === 0 || filePath.endsWith('/')) {
+        console.log(`Ignoring non-file or zero-byte object: ${filePath}`);
+        return null;
+    }
+
+    // --- Extract User ID ---
+    let userId = null;
+    const parts = filePath.split('/');
+
+    if (filePath.startsWith('profile_photos/')) {
+        // Path: profile_photos/{userId}/{fileName}
+        userId = parts[1];
+    } else if (filePath.startsWith('task_attachments/')) {
+        // Path: task_attachments/{userId}/{taskId}/{fileName} (legacy)
+        if (parts[1] !== 'shared') {
+            userId = parts[1]; // User ID is the second part in legacy path
+        } else {
+            // *** FIX for SHARED FILES ***
+            // Read the ownerId from the metadata we set during upload
+            const metadata = file.metadata || {};
+            if (metadata.ownerId) {
+                userId = metadata.ownerId;
+            } else {
+                console.log(`Skipping shared file: ${filePath}. Missing 'ownerId' in metadata.`);
+                return null;
+            }
+        }
+    }
+
+    if (!userId) {
+        console.log(`Could not determine userId for file: ${filePath}`);
+        return null;
+    }
+
+    // --- Update Firestore ---
+    const userRef = admin.firestore().collection('users').doc(userId);
+    try {
+        // Atomically increment the storage usage
+        await userRef.set({
+            storageUsed: admin.firestore.FieldValue.increment(fileSize)
+        }, { merge: true }); // Use set with merge:true to create field if it doesn't exist
+        console.log(`Incremented storage for user ${userId} by ${fileSize} bytes.`);
+        return null;
+    } catch (error) {
+        console.error(`Failed to update storage usage for user ${userId} on upload:`, error);
+        return null;
+    }
+});
+
+// --- FUNCTION 12: Update Firestore Storage Usage on File Delete (v2 SYNTAX) ---
+// Triggered when a file is deleted
+exports.updateStorageUsageOnDelete = onObjectDeleted(async (event) => {
+    // v2 uses event.data instead of just 'object'
+    const file = event.data;
+    const fileSize = parseInt(file.size || '0'); // Size in bytes
+    const filePath = file.name;
+
+    // Ignore directories or files without size
+    if (!filePath || fileSize === 0 || filePath.endsWith('/')) {
+        console.log(`Ignoring non-file or zero-byte object deletion: ${filePath}`);
+        return null;
+    }
+
+    // --- Extract User ID (Same logic as upload) ---
+    let userId = null;
+    const parts = filePath.split('/');
+
+    if (filePath.startsWith('profile_photos/')) {
+        userId = parts[1];
+    } else if (filePath.startsWith('task_attachments/')) {
+        if (parts[1] !== 'shared') {
+            userId = parts[1];
+        } else {
+             // *** WORKAROUND (Still required for deletes) ***
+            // When a file is deleted, its metadata is gone.
+            // We cannot know who owned it, so we can't decrement their storage.
+            console.log(`Skipping storage usage update for deleted shared file: ${filePath}.`);
+            return null;
+        }
+    }
+
+    if (!userId) {
+        console.log(`Could not determine userId for deleted file: ${filePath}`);
+        return null;
+    }
+
+    // --- Update Firestore ---
+    const userRef = admin.firestore().collection('users').doc(userId);
+    try {
+        // Atomically decrement the storage usage (increment by negative value)
+        await userRef.set({
+            storageUsed: admin.firestore.FieldValue.increment(-fileSize)
+        }, { merge: true });
+        console.log(`Decremented storage for user ${userId} by ${fileSize} bytes.`);
+        return null;
+    } catch (error) {
+        // If user doc doesn't exist (e.g., account deleted), just log it and exit gracefully.
+        if (error.code === 5) { // Firestore NOT_FOUND error code
+             console.log(`User document ${userId} not found. Skipping storage update on delete.`);
+             return null;
+        }
+        console.error(`Failed to update storage usage for user ${userId} on delete:`, error);
+        return null;
+    }
 });

@@ -1214,11 +1214,96 @@ body.team-mode .simple-mode-only {
     color: var(--text-light);
 }
 
-/* Add this new rule to your CSS file */
 .chart-container {
     position: relative;
     height: 400px; /* This gives the chart a fixed height */
     width: 100%;
+}
+
+/* --- NEW STYLES for Admin Panel Navigation --- */
+
+.admin-nav {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.admin-nav-btn {
+    background: none;
+    border: none;
+    padding: 1rem 1.5rem;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--completed-color);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.admin-nav-btn i {
+    margin-right: 0.5rem;
+}
+
+.admin-nav-btn:hover {
+    color: var(--text-color);
+}
+
+.admin-nav-btn.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+/* --- NEW: Make admin user names clickable --- */
+.admin-user-name-clickable {
+    font-weight: 600;
+    color: var(--primary-color);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.2s;
+}
+
+.admin-user-name-clickable:hover {
+    text-decoration-color: var(--primary-color);
+}
+
+/* --- NEW: Styles for User Detail Modal --- */
+#user-detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.user-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.user-detail-card {
+    background-color: var(--bg-color);
+    padding: 1.5rem;
+    border-radius: 10px;
+}
+
+.user-detail-card h4 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+}
+
+.user-detail-card p {
+    font-size: 1.2rem;
+    font-weight: 500;
+    margin: 0.25rem 0;
+}
+
+.user-detail-card small {
+    font-size: 0.9rem;
+    color: var(--completed-color);
 }
 
 /* Styling for the new profile photo wrapper */
@@ -1447,4 +1532,27 @@ body.dark-theme .danger-btn {
 body.dark-theme .danger-btn:hover {
     background-color: var(--error-color);
     color: var(--app-bg);
+}
+
+/* --- STYLES FOR PREMIUM PLUS BADGE --- */
+
+.label-with-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: .5rem; /* Replaces the label's margin-bottom */
+}
+
+.label-with-badge label {
+    margin-bottom: 0; /* Remove margin from label itself */
+}
+
+.premium-plus-badge {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 10px;
+    color: #023047; /* Dark text for contrast */
+    background: linear-gradient(45deg, gold, #ffb703); /* Golden gradient */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }

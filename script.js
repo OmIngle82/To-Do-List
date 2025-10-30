@@ -97,6 +97,12 @@ let isPostingComment = false;
 let activeListenerToken = null; 
 let lastCommentTime = 0;
 let currentAdminFilter = 'all'; // Can be 'all', 'admin', 'premium', or 'free' 
+const YEARLY_PLAN_ID = "plan_RZGREjjDG6aftY";
+const MONTHLY_PLAN_ID = "plan_RZGPfzNRtiYgG0"; 
+const SHARE_ASSIGN_LIMIT_MONTHLY = 20; 
+const FREE_STORAGE_LIMIT = 100 * 1024 * 1024; // 100MB
+const MONTHLY_STORAGE_LIMIT = 1 * 1024 * 1024 * 1024; // 1GB
+const YEARLY_STORAGE_LIMIT = 10 * 1024 * 1024 * 1024; // 10GB
 const ALL_BADGES = [
     {
         id: 'first_strike',
@@ -271,26 +277,42 @@ const listenForProfile = () => {
             if (adminLink) {
                 adminLink.classList.toggle('hide', currentUserProfile.role !== 'admin');
             }
+
+            // --- ALL SUBSCRIPTION UI LOGIC ---
+            
+            // Get all the relevant UI elements
+            const subStatusEl = document.getElementById('subscription-status');
+            const planSelectionContainer = document.getElementById('plan-selection-container');
             const profilePhotoContainer = document.getElementById('profilePhotoContainer');
             const menuProfilePhotoContainer = document.getElementById('menuProfilePhotoContainer');
+            const yearlyBadge = document.getElementById('yearly-premium-badge');
+            const prioritySupportSection = document.getElementById('priority-support-section');
 
-            if (currentUserProfile.subscription?.status === 'premium') {
-                if (profilePhotoContainer) profilePhotoContainer.classList.add('premium-ring');
-                if (menuProfilePhotoContainer) menuProfilePhotoContainer.classList.add('premium-ring');
-            } else {
-                if (profilePhotoContainer) profilePhotoContainer.classList.remove('premium-ring');
-                if (menuProfilePhotoContainer) menuProfilePhotoContainer.classList.remove('premium-ring');
-            }
-            const subStatusEl = document.getElementById('subscription-status');
-            const upgradeBtn = document.getElementById('upgrade-to-premium-btn');
+            const isPremium = currentUserProfile.subscription?.status === 'premium';
+            const isYearly = isPremium && currentUserProfile.subscription?.planId === YEARLY_PLAN_ID;
 
-            if (currentUserProfile.subscription?.status === 'premium') {
-                subStatusEl.textContent = 'You are on the Premium Plan. ✨';
-                upgradeBtn.classList.add('hide');
-            } else {
-                subStatusEl.textContent = 'You are currently on the Free Plan.';
-                upgradeBtn.classList.remove('hide');
+            // 1. Show/Hide Premium Ring
+            if (profilePhotoContainer) profilePhotoContainer.classList.toggle('premium-ring', isPremium);
+            if (menuProfilePhotoContainer) menuProfilePhotoContainer.classList.toggle('premium-ring', isPremium);
+
+            // 2. Show/Hide Plan Selection vs. Status Text
+            if (subStatusEl) {
+                subStatusEl.textContent = isPremium ? 'You are on the Premium Plan. ✨' : 'You are currently on the Free Plan.';
             }
+            if (planSelectionContainer) {
+                planSelectionContainer.classList.toggle('hide', isPremium); // Hide plan cards if already premium
+            }
+
+            // 3. Show/Hide "Premium Plus" Badge
+            if (yearlyBadge) {
+                yearlyBadge.classList.toggle('hide', !isYearly);
+            }
+
+            // 4. Show/Hide Priority Support Section
+            if (prioritySupportSection) {
+                prioritySupportSection.classList.toggle('hide', !isYearly);
+            }
+            // --- END OF SUBSCRIPTION UI LOGIC ---
 
             applyUserPreferences(currentUserProfile.preferences);
         }
@@ -843,7 +865,7 @@ const updateTaskCounters = () => {
     if (statScore) statScore.textContent = `${score}%`;
 };
 
-const renderAnalytics = () => {
+const renderSimplePersonalAnalytics = () => {
     // 1. Get the DOM elements for the report numbers
     const dailyCountEl = document.getElementById('daily-completed-count');
     const weeklyCountEl = document.getElementById('weekly-completed-count');
@@ -872,6 +894,97 @@ const renderAnalytics = () => {
     }
 };
 
+// --- NEW: Advanced Personal Analytics for Yearly Users ---
+const loadAndRenderAdvancedPersonalAnalytics = async () => {
+    const container = document.getElementById('personal-analytics-container');
+    if (!container || !currentUser) return;
+    container.innerHTML = `<p>Loading advanced analytics...</p>`;
+
+    try {
+        // --- 1. Query the user's OWN completed tasks from the last 30 days ---
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const thirtyDaysAgoTimestamp = firebase.firestore.Timestamp.fromDate(thirtyDaysAgo);
+
+        const snapshot = await db.collection('users').doc(currentUser.uid).collection('tasks')
+            .where('status', '==', 'completed')
+            .where('completedAt', '>=', thirtyDaysAgoTimestamp)
+            .orderBy('completedAt', 'desc')
+            .get();
+            
+        const completedTasks = snapshot.docs.map(doc => doc.data());
+
+        // --- 2. Process data for the chart ---
+        const dailyCounts = {}; // e.g., {"10/29/2025": 5, "10/30/2025": 2}
+        for (let i = 0; i <= 30; i++) { // Pre-fill last 30 days with 0
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            dailyCounts[date.toLocaleDateString()] = 0;
+        }
+
+        completedTasks.forEach(task => {
+            if (task.completedAt) {
+                const dateString = task.completedAt.toDate().toLocaleDateString();
+                if (dailyCounts.hasOwnProperty(dateString)) {
+                    dailyCounts[dateString]++;
+                }
+            }
+        });
+
+        // Sort data for the chart
+        const sortedData = Object.entries(dailyCounts).sort((a, b) => new Date(a[0]) - new Date(b[0]));
+        const chartLabels = sortedData.map(entry => entry[0]);
+        const chartData = sortedData.map(entry => entry[1]);
+
+        // --- 3. Render the advanced UI ---
+        container.innerHTML = `
+            <div class="stats-container" style="margin-bottom: 2rem;">
+                <div class="stat-card"><h4>Tasks Completed (Last 30 Days)</h4><p>${completedTasks.length}</p></div>
+                <div class="stat-card"><h4>Average per Day</h4><p>${(completedTasks.length / 30).toFixed(1)}</p></div>
+            </div>
+            <div class="chart-container">
+                <canvas id="personal-analytics-chart"></canvas>
+            </div>
+        `;
+
+        // --- 4. Create the chart ---
+        const ctx = document.getElementById('personal-analytics-chart').getContext('2d');
+        if (analyticsChart) { // Reuse the same chart variable
+            analyticsChart.destroy();
+        }
+        analyticsChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: 'Tasks Completed',
+                    data: chartData,
+                    backgroundColor: 'rgba(212, 163, 115, 0.2)',
+                    borderColor: 'rgba(212, 163, 115, 1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                scales: { y: { beginAtZero: true } },
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Your Task Completion Trend (Last 30 Days)'
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error("Error loading advanced personal analytics:", error);
+        container.innerHTML = `<p class="feedback error">Could not load your analytics data.</p>`;
+    }
+};
+
 const loadUsersForAdmin = async () => {
     const userListContainer = document.getElementById('user-list-container');
     if (!userListContainer) return;
@@ -891,7 +1004,7 @@ const loadUsersForAdmin = async () => {
         }
 
         // --- FILTERING LOGIC STARTS HERE ---
-        const allAdminUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        allAdminUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         let filteredUsers;
 
         switch (currentAdminFilter) {
@@ -947,7 +1060,7 @@ const loadUsersForAdmin = async () => {
             usersHTML += `
                 <div class="${itemClass}" data-id="${user.id}">
                     <div class="user-info-wrapper">
-                        <span>${user.displayName || 'N/A'}</span>
+                        <span class="admin-user-name-clickable" data-id="${user.id}">${user.displayName || 'N/A'}</span>
                         <span>${user.email}</span>
                         <span>${user.role || 'user'}</span>
                         <span>${user.subscription?.status === 'premium' ? 'Premium ✨' : 'Free'}</span>
@@ -966,6 +1079,79 @@ const loadUsersForAdmin = async () => {
         console.error("Error loading users for admin:", error);
         userListContainer.innerHTML = `<p class="feedback error">Could not load user data.</p>`;
     }
+};
+// --- NEW: User Detail Modal Logic ---
+const userDetailModal = document.getElementById('user-detail-modal');
+const userDetailCloseBtn = document.getElementById('user-detail-close-btn');
+const openUserDetailModal = () => userDetailModal?.classList.remove('hide');
+const closeUserDetailModal = () => userDetailModal?.classList.add('hide');
+userDetailCloseBtn?.addEventListener('click', closeUserDetailModal);
+let allAdminUsers = [];
+
+const populateAndShowUserDetailModal = (userId) => {
+    const user = allAdminUsers.find(u => u.id === userId);
+    if (!user) {
+        alert("Could not find user data.");
+        return;
+    }
+
+    const modalName = document.getElementById('user-detail-name');
+    const modalBody = document.getElementById('user-detail-body');
+
+    modalName.textContent = user.displayName || user.email;
+
+    // 1. Determine Subscription Status
+    let subStatus = "Free";
+    let storageLimit = FREE_STORAGE_LIMIT;
+    let teamLimitText = "N/A";
+
+    if (user.subscription?.status === 'premium') {
+        if (user.subscription?.planId === YEARLY_PLAN_ID) {
+            subStatus = "Premium (Yearly)";
+            storageLimit = YEARLY_STORAGE_LIMIT;
+            teamLimitText = "Unlimited";
+        } else {
+            subStatus = "Premium (Monthly)";
+            storageLimit = MONTHLY_STORAGE_LIMIT;
+            const teamUsage = user.teamUsage?.sharedAssignedCount || 0;
+            teamLimitText = `${teamUsage} / ${SHARE_ASSIGN_LIMIT_MONTHLY}`;
+        }
+    }
+
+    // 2. Format Storage
+    const storageUsed = user.storageUsed || 0;
+    const storageText = `${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}`;
+    const storagePercent = (storageUsed / storageLimit) * 100;
+
+    // 3. Build Modal HTML
+    modalBody.innerHTML = `
+        <div class="user-detail-grid">
+            <div class="user-detail-card">
+                <h4>Subscription</h4>
+                <p>${subStatus}</p>
+                <small>${user.email}</small>
+            </div>
+            <div class="user-detail-card">
+                <h4>Team Share/Assign Limit</h4>
+                <p>${teamLimitText}</p>
+                <small>${subStatus === 'Premium (Monthly)' ? 'Resets monthly' : ''}</small>
+            </div>
+            <div class="user-detail-card">
+                <h4>Storage Usage</h4>
+                <p>${storageText}</p>
+                <small>${storagePercent.toFixed(2)}% Used</small>
+                <div class="overall-progress-bar-background" style="margin-top: 10px;">
+                    <div class="overall-progress-bar" style="width: ${storagePercent}%;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="user-detail-card">
+            <h4>Raw User Data</h4>
+            <pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 200px; overflow-y: auto; background-color: var(--border-color); padding: 10px; border-radius: 5px;">${JSON.stringify(user, null, 2)}</pre>
+        </div>
+    `;
+
+    openUserDetailModal();
 };
 
 const loadAndRenderAnalytics = async () => {
@@ -1447,6 +1633,7 @@ const renderAttachmentPreviews = (container, files, isDetailView) => {
         const isWrapper = !!fileOrWrapper.file;
         const fileName = isWrapper ? fileOrWrapper.file.name : fileOrWrapper.name;
         const fileURL = isWrapper ? '#' : fileOrWrapper.url;
+        const filePath = isWrapper ? null : fileOrWrapper.path; // Get the path for existing files
         const fileId = isWrapper ? fileOrWrapper.id : null;
         const iconClass = getFileIcon(fileName);
 
@@ -1470,7 +1657,10 @@ const renderAttachmentPreviews = (container, files, isDetailView) => {
                 <div class="attachment-progress"><div class="progress-bar"></div></div>
                 <i class="status-icon"></i>
                 <p class="attachment-error"></p>
-                <button type="button" class="delete-attachment-btn" data-name="${fileName}" ${isWrapper ? `data-id="${fileId}"` : ''}>&times;</button>`;
+                <button type="button" class="delete-attachment-btn" 
+                        data-name="${fileName}" 
+                        ${isWrapper ? `data-id="${fileId}"` : ''}
+                        ${filePath ? `data-path="${filePath}"` : ''}>&times;</button>`;
         }
         container.appendChild(item);
     });
@@ -1520,7 +1710,7 @@ const verifyConversationExists = async (conversationId, maxRetries = 5) => {
 const _performUploadTask = (fileRef, fileWrapper, onProgress, computeOverallProgress) => {
     const { file, id } = fileWrapper;
     return new Promise((resolve, reject) => {
-        const uploadTask = fileRef.put(file);
+        const uploadTask = fileRef.put(file, metadata);
         uploadTask.on('state_changed',
             (snapshot) => {
                 fileWrapper.bytesTransferred = snapshot.bytesTransferred;
@@ -1534,7 +1724,12 @@ const _performUploadTask = (fileRef, fileWrapper, onProgress, computeOverallProg
                 fileWrapper.status = 'success';
                 onProgress(id, 100, 'success');
                 computeOverallProgress();
-                resolve({ name: file.name, url: downloadURL, size: file.size });
+                resolve({ 
+                    name: file.name, 
+                    url: downloadURL, 
+                    size: file.size, 
+                    path: fileRef.fullPath
+                });
             }
         );
     });
@@ -1557,55 +1752,42 @@ const uploadFiles = async (conversationId, taskId, onProgress, onOverallProgress
 
         return new Promise(async (resolve, reject) => {
             const uniqueFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name.replace(/\s+/g, '_')}`;
-            let uploadPathUsed = 'shared';
+            let uploadPath;
+            let metadata = {}; // We'll pass this to _performUploadTask
+
+            if (isPersonalTask) {
+                // This is a personal task. Use the legacy path.
+                // This path WILL be tracked by Cloud Functions.
+                uploadPath = `task_attachments/${currentUser.uid}/${taskId}/${uniqueFileName}`;
+                if(updateDebug) updateDebug('storage-path-text', 'Using personal path (quota tracked)', true);
+            
+            } else {
+                // This is a shared/assigned task. Use the shared path.
+                // This path will NOT be tracked by quota functions.
+                uploadPath = `task_attachments/shared/${conversationId}/${uniqueFileName}`;
+                // We add metadata for premium features, NOT for quota
+                metadata = { customMetadata: { ownerId: currentUser.uid } }; 
+                if(updateDebug) updateDebug('storage-path-text', 'Using shared path (unlimited)', true);
+            }
 
             try {
-                // --- ATTEMPT 1: SHARED PATH ---
-                const sharedPath = `task_attachments/shared/${conversationId}/${uniqueFileName}`;
-                const sharedFileRef = storage.ref(sharedPath);
-                console.log("Attempting upload to SHARED path:", sharedPath);
+                const fileRef = storage.ref(uploadPath);
+                console.log("Attempting upload to designated path:", uploadPath);
 
-                const result = await _performUploadTask(sharedFileRef, fileWrapper, onProgress, computeOverallProgress);
-
-                await addUpdateLog(conversationId, 'attachment_added', { fileName: result.name, fileSize: result.size, path: uploadPathUsed });
+                // Pass metadata (even if empty) to the upload task
+                const result = await _performUploadTask(fileRef, fileWrapper, onProgress, computeOverallProgress, metadata);
+                
+                // 'result' already contains the path from _performUploadTask
+                await addUpdateLog(conversationId, 'attachment_added', { fileName: result.name, fileSize: result.size, path: result.path });
                 resolve(result);
 
             } catch (error) {
-                // --- HANDLE SHARED PATH FAILURE ---
-                if (error.code === 'storage/unauthorized') {
-                    console.warn(`SHARED path failed with permission error. Falling back to LEGACY path.`, error);
-                    uploadPathUsed = 'legacy';
-                    _updatePreviewItemClasses(id, 'fallback');
-                    if(updateDebug) updateDebug('storage-path-text', 'Using legacy path (fallback)', true);
-
-
-                    try {
-                        // --- ATTEMPT 2: LEGACY PATH FALLBACK ---
-                        const legacyPath = `task_attachments/${currentUser.uid}/${taskId}/${uniqueFileName}`;
-                        const legacyFileRef = storage.ref(legacyPath);
-                        console.log("Attempting upload to LEGACY path:", legacyPath);
-
-                        const result = await _performUploadTask(legacyFileRef, fileWrapper, onProgress, computeOverallProgress);
-
-                        await addUpdateLog(conversationId, 'attachment_added', { fileName: result.name, fileSize: result.size, path: uploadPathUsed });
-                        resolve(result);
-
-                    } catch (legacyError) {
-                        // --- HANDLE LEGACY PATH FAILURE ---
-                        const message = getFriendlyStorageErrorMessage(legacyError);
-                        console.error(`LEGACY path upload also failed for ${file.name}:`, { /* ... */ });
-                        fileWrapper.status = 'error';
-                        onProgress(id, 0, 'error', message, legacyError.code);
-                        reject({ name: file.name, error: legacyError });
-                    }
-                } else {
-                    // --- HANDLE OTHER SHARED PATH ERRORS ---
-                    const message = getFriendlyStorageErrorMessage(error);
-                     console.error(`SHARED path upload failed for ${file.name} with non-permission error:`, { /* ... */ });
-                    fileWrapper.status = 'error';
-                    onProgress(id, 0, 'error', message, error.code);
-                    reject({ name: file.name, error });
-                }
+                // This will now catch "real" errors, not the fallback logic
+                const message = getFriendlyStorageErrorMessage(error);
+                console.error(`Upload failed for ${file.name}:`, error);
+                fileWrapper.status = 'error';
+                onProgress(id, 0, 'error', message, error.code);
+                reject({ name: file.name, error });
             }
         });
     });
@@ -1908,6 +2090,14 @@ const setupNotifications = () => {
 
 
 // --- Utility Functions --- //
+function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
 const isPremiumUser = () => {
     // Use optional chaining (?.) to safely check for nested properties.
     // This prevents errors if a user has no subscription object at all.
@@ -1986,19 +2176,86 @@ document.addEventListener('DOMContentLoaded', () => {
     const analyticsLink = document.getElementById('analytics-link');
     analyticsLink?.addEventListener('click', (e) => {
         e.preventDefault();
-        renderAnalytics();
+
+        // --- NEW: Check if user is Yearly Premium ---
+        const isYearly = isPremiumUser() && currentUserProfile?.subscription?.planId === YEARLY_PLAN_ID;
+        
+        if (isYearly) {
+            // Load the advanced chart
+            loadAndRenderAdvancedPersonalAnalytics();
+        } else {
+            // Load the simple text report
+            renderSimplePersonalAnalytics();
+        }
+        // --- END NEW ---
+
         showPage('analytics-page');
         profileDropdown.classList.remove('show');
     });
+    const adminUsersContent = document.getElementById('admin-users-content');
+    const adminAnalyticsContent = document.getElementById('admin-analytics-content');
     adminLink?.addEventListener('click', (e) => {
         e.preventDefault();
         showPage('admin-page');
+        // --- NEW: Set default tab view ---
+        // Ensure Users content is visible
+        adminUsersContent.classList.remove('hide');
+        // Ensure Analytics content is hidden
+        adminAnalyticsContent.classList.add('hide');
+        // Make "User Data" button active
+        adminNav?.querySelector('.active').classList.remove('active');
+        document.getElementById('admin-nav-users')?.classList.add('active');
+        // Load only the content for the default tab
         loadUsersForAdmin(); 
-        loadAndRenderAnalytics();
+        // --- END NEW ---
         profileDropdown.classList.remove('show');
     });
+    // --- NEW: Admin Panel Tab Switching Logic --- //
+    const adminNav = document.querySelector('.admin-nav');
+    const adminContentPanels = document.querySelectorAll('.admin-content-panel');
+
+    adminNav?.addEventListener('click', (e) => {
+        const clickedButton = e.target.closest('.admin-nav-btn');
+
+        // Do nothing if the click wasn't on a button
+        if (!clickedButton) return; 
+
+        // Get the ID of the content panel to show
+        const targetId = clickedButton.dataset.target;
+        const targetPanel = document.getElementById(targetId);
+        if (!targetPanel) return;
+
+        // 1. Update button 'active' state
+        adminNav.querySelectorAll('.admin-nav-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        clickedButton.classList.add('active');
+
+        // 2. Show the target panel and hide the others
+        adminContentPanels.forEach(panel => {
+            panel.classList.add('hide');
+        });
+        targetPanel.classList.remove('hide');
+
+        // 3. Load the content for the clicked tab
+        if (targetId === 'admin-users-content') {
+            loadUsersForAdmin();
+        } else if (targetId === 'admin-analytics-content') {
+            // This is the key part that was missing
+            loadAndRenderAnalytics();
+        }
+    });
+    // --- END: Admin Panel Tab Switching Logic --- //
+    // --- NEW: User Detail Modal Logic ---
 
     document.addEventListener('click', async (e) => {
+        // --- NEW: Handle click on user name ---
+        if (e.target.matches('.admin-user-name-clickable')) {
+            const userId = e.target.dataset.id;
+            populateAndShowUserDetailModal(userId);
+            return; // Stop further execution
+        }
+        // --- END NEW ---
     // Find the parent user item for any button that might have been clicked
     const userItem = e.target.closest('.admin-user-item');
     if (!userItem) return; // Exit if the click was not inside a user row
@@ -2313,6 +2570,15 @@ adminUserFilters?.addEventListener('click', (e) => {
     try {
         let conversationId;
         let finalTaskId = editingTaskId; // Keep track of the task ID
+        // Determine if the task is personal. New tasks are always personal.
+            let isPersonalTask = true; 
+            if (editingTaskId) {
+                const originalTask = allTasks.find(t => t.id === editingTaskId);
+                // If it's already a shared/assigned task, it's not personal
+                if (originalTask && (originalTask.sharedBy || originalTask.assignedBy || originalTask.assignedTo)) {
+                    isPersonalTask = false;
+                }
+            }
 
         if (editingTaskId) {
              const originalTask = allTasks.find(t => t.id === editingTaskId);
@@ -2336,7 +2602,7 @@ adminUserFilters?.addEventListener('click', (e) => {
         updateDebug('conversation-status-text', `Verified (${conversationId.substring(0,5)}...)`, true);
 
         if (editingTaskId) {
-            newAttachments = await uploadFiles(conversationId, editingTaskId, updateUploadProgress, updateOverallProgress, updateDebug);
+            newAttachments = await uploadFiles(conversationId, editingTaskId, updateUploadProgress, updateOverallProgress, updateDebug, isPersonalTask);
             taskData.attachments = [...existingAttachments, ...newAttachments];
             if (!allTasks.find(t=>t.id === editingTaskId).conversationId) taskData.conversationId = conversationId;
 
@@ -2344,8 +2610,7 @@ adminUserFilters?.addEventListener('click', (e) => {
         } else {
             const tempTaskId = taskRef.doc().id;
             finalTaskId = tempTaskId; // The new task's ID
-            newAttachments = await uploadFiles(conversationId, tempTaskId, updateUploadProgress, updateOverallProgress, updateDebug);
-            
+            newAttachments = await uploadFiles(conversationId, tempTaskId, updateUploadProgress, updateOverallProgress, updateDebug, isPersonalTask);
             taskData.attachments = newAttachments;
             taskData.conversationId = conversationId;
             taskData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
@@ -2519,13 +2784,24 @@ adminUserFilters?.addEventListener('click', (e) => {
     attachmentsListModal?.addEventListener('click', async (e) => {
         const deleteBtn = e.target.closest('.delete-attachment-btn');
         if (deleteBtn) {
-            const { name, id } = deleteBtn.dataset;
+            const { name, id, path } = deleteBtn.dataset;
 
             if (id) { // Removing a file selected for upload
                 filesToUpload = filesToUpload.filter(f => f.id !== id);
+            
             } else { // Removing a pre-existing attachment during edit
                 existingAttachments = existingAttachments.filter(f => f.name !== name);
-                
+                if (path) {
+                    if (path.startsWith(`task_attachments/${currentUser.uid}/`)) {
+                        try {
+                            await storage.ref(path).delete();
+                            console.log(`Deleted personal file from storage: ${path}`);
+                        } catch (error) {
+                            console.error(`Failed to delete file from storage: ${path}`, error);
+                            // Note: We still proceed to remove it from the UI.
+                        }
+                    }
+                }
                 // Log the removal of an existing attachment
                 if (editingTaskId) {
                     const task = allTasks.find(t => t.id === editingTaskId);
@@ -2659,7 +2935,16 @@ adminUserFilters?.addEventListener('click', (e) => {
     const cancelExportBtn = document.getElementById('cancel-export-btn');
     const exportCsvBtn = document.getElementById('export-csv-btn');
 
-    exportBtn?.addEventListener('click', () => exportModal.classList.remove('hide'));
+    exportBtn?.addEventListener('click', () => {
+        // Check if the user is premium
+        if (isPremiumUser()) {
+            // If premium, show the export options modal
+            if (exportModal) exportModal.classList.remove('hide');
+        } else {
+            // If not premium, show the upgrade modal
+            openUpgradeModal();
+        }
+    });
     cancelExportBtn?.addEventListener('click', () => exportModal.classList.add('hide'));
 
     const escapeCsvCell = (cell) => {
