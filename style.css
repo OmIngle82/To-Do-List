@@ -1444,7 +1444,7 @@ body.team-mode .simple-mode-only {
 
 .comparison-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1.5rem;
 }
 
@@ -1452,9 +1452,14 @@ body.team-mode .simple-mode-only {
     background-color: var(--bg-color);
     padding: 1.5rem;
     border-radius: 10px;
+    border: 2px solid var(--completed-color); 
 }
 
 .plan-column.premium {
+    border: 2px solid var(--primary-color);
+}
+
+.plan-column.featured {
     border: 2px solid var(--standout-color);
 }
 
@@ -1477,19 +1482,23 @@ body.team-mode .simple-mode-only {
     margin-bottom: 0.75rem;
 }
 
-/* Add checkmark/star icons to list items */
 .plan-column li::before {
     position: absolute;
     left: 0;
     font-family: "Font Awesome 6 Free";
     font-weight: 900;
     color: var(--success-color);
-    content: '\f00c'; /* Checkmark icon */
+    content: '\f058'; 
 }
 
 .plan-column.premium li::before {
+    color: var(--primary-color);
+    content: '\f005';
+}
+
+.plan-column.featured li::before {
     color: var(--standout-color);
-    content: '\f005'; /* Star icon */
+    content: '\f3a5';
 }
 
 /* Styling for the nested integration details */
@@ -1510,6 +1519,7 @@ body.team-mode .simple-mode-only {
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
     font-family: monospace;
+    word-break: break-all;
 }
 
 /* --- RESPONSIVE FIX FOR COMPARISON SECTION --- */
