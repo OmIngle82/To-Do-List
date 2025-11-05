@@ -1086,9 +1086,86 @@ const userDetailCloseBtn = document.getElementById('user-detail-close-btn');
 const openUserDetailModal = () => userDetailModal?.classList.remove('hide');
 const closeUserDetailModal = () => userDetailModal?.classList.add('hide');
 userDetailCloseBtn?.addEventListener('click', closeUserDetailModal);
+
+const adminEditNameBtn = document.getElementById('admin-edit-name-btn');
+const adminSaveNameBtn = document.getElementById('admin-save-name-btn');
+const adminCancelNameBtn = document.getElementById('admin-cancel-name-btn');
+const userDetailDisplayView = document.getElementById('user-detail-display-view');
+const userDetailEditView = document.getElementById('user-detail-edit-view');
+const editInput = document.getElementById('admin-edit-name-input');
+const nameHeader = document.getElementById('user-detail-name');
+
+// 1. Click Edit Pencil -> Show Input
+adminEditNameBtn?.addEventListener('click', () => {
+    // Pre-fill the input with the *current* header text in case it was just saved
+    editInput.value = nameHeader.textContent;
+    userDetailDisplayView.classList.add('hide');
+    userDetailEditView.classList.remove('hide');
+    editInput.focus();
+});
+
+// 2. Click Cancel X -> Hide Input
+adminCancelNameBtn?.addEventListener('click', () => {
+    userDetailDisplayView.classList.remove('hide');
+    userDetailEditView.classList.add('hide');
+});
+
+// 3. Click Save Checkmark -> Call Function
+adminSaveNameBtn?.addEventListener('click', async () => {
+    const userId = userDetailModal.dataset.currentUserId;
+    const newName = editInput.value.trim();
+    const currentName = nameHeader.textContent;
+
+    if (!userId) {
+        alert("Error: No user ID found.");
+        return;
+    }
+
+    // Check if the name is valid and different
+    if (!newName || newName === "") {
+        alert("Name cannot be empty.");
+        return;
+    }
+
+    if (newName === currentName) {
+        // No change, just close the edit view
+        userDetailDisplayView.classList.remove('hide');
+        userDetailEditView.classList.add('hide');
+        return;
+    }
+
+    // --- Show saving state (optional, but good UX) ---
+    adminSaveNameBtn.disabled = true;
+    adminSaveNameBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+        // 1. Call the Cloud Function
+        const adminUpdateUserName = firebase.functions().httpsCallable('adminUpdateUserName');
+        await adminUpdateUserName({ userId: userId, newName: newName });
+        
+        // 2. Update the modal title for immediate feedback
+        nameHeader.textContent = newName;
+        
+        // 3. Refresh the main admin list in the background
+        loadUsersForAdmin();
+
+        // 4. Switch back to display view
+        userDetailDisplayView.classList.remove('hide');
+        userDetailEditView.classList.add('hide');
+        
+    } catch (error) {
+        console.error("Error updating name:", error);
+        alert(`Failed to update name: ${error.message}`);
+    } finally {
+        // 5. Reset button
+        adminSaveNameBtn.disabled = false;
+        adminSaveNameBtn.innerHTML = '<i class="fas fa-check"></i>';
+    }
+});
 let allAdminUsers = [];
 
 const populateAndShowUserDetailModal = (userId) => {
+    userDetailModal.dataset.currentUserId = userId;
     const user = allAdminUsers.find(u => u.id === userId);
     if (!user) {
         alert("Could not find user data.");
@@ -1097,6 +1174,17 @@ const populateAndShowUserDetailModal = (userId) => {
 
     const modalName = document.getElementById('user-detail-name');
     const modalBody = document.getElementById('user-detail-body');
+
+    const editInput = document.getElementById('admin-edit-name-input');
+    const displayName = user.displayName || user.email;
+    
+    // Set both the header and the input field
+    modalName.textContent = displayName;
+    editInput.value = displayName;
+
+    // Reset views to default
+    document.getElementById('user-detail-display-view').classList.remove('hide');
+    document.getElementById('user-detail-edit-view').classList.add('hide');
 
     modalName.textContent = user.displayName || user.email;
 

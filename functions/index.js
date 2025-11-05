@@ -733,3 +733,57 @@ exports.updateStorageUsageOnDelete = onObjectDeleted(async (event) => {
         return null;
     }
 });
+
+// --- FUNCTION 13: Admin Update User Name (NEW) ---
+exports.adminUpdateUserName = onCall(async (request) => {
+  // 1. Security Check: Verify the caller is an admin.
+  const adminUid = request.auth?.uid;
+  if (!adminUid) {
+    throw new HttpsError(
+      'unauthenticated',
+      'You must be logged in to perform this action.'
+    );
+  }
+
+  // Check Firestore role just in case custom claims aren't set
+  if (request.auth.token.role !== 'admin') {
+    const adminDoc = await admin.firestore().collection('users').doc(adminUid).get();
+    if (!adminDoc.exists || adminDoc.data().role !== 'admin') {
+        throw new HttpsError(
+            'permission-denied',
+            'You must be an admin to perform this action.'
+        );
+    }
+  }
+
+  // 2. Get the target user's ID and new name.
+  const { userId, newName } = request.data;
+  if (!userId || !newName || newName.trim() === "") {
+    throw new HttpsError(
+        'invalid-argument',
+        'Please provide a valid user ID and a non-empty name.'
+    );
+  }
+
+  try {
+    // 3. Update BOTH Firebase Auth and Firestore
+    
+    // Update Firebase Authentication display name
+    await admin.auth().updateUser(userId, { displayName: newName });
+
+    // Update Firestore display name
+    await admin.firestore().collection('users').doc(userId).update({
+        displayName: newName
+    });
+
+    // 4. Return a success message.
+    return { success: true, message: `Successfully updated name for user ${userId}.` };
+
+  } catch (error) {
+    console.error("Error updating user name:", error);
+    throw new HttpsError(
+        'internal',
+        'An unexpected error occurred while updating the name.'
+    );
+  }
+});
