@@ -96,6 +96,7 @@ let originalAttachmentsBeforeEdit = [];
 let calendarDate = new Date();
 let calendarMode = userPreferences.calendarDefault;
 let unsubscribeTasks, unsubscribeProfile, unsubscribeComments, unsubscribeUpdateLog;
+let isTaskLoading = false;
 // New Modern Accent Palette
 const accentColors = [
     '#4D7CFE', // Brand Blue
@@ -231,11 +232,7 @@ const showPage = (pageId) => {
     }
 };
 
-const showFeedback = (element, message, type) => {
-    element.textContent = message;
-    element.className = 'feedback ' + type;
-    setTimeout(() => { element.textContent = ''; element.className = 'feedback'; }, 4000);
-};
+// (Removed duplicate showFeedback function. See global toast notification system below for the correct implementation.)
 
 const updateUIforLoginState = (user) => {
     currentUser = user;
@@ -250,6 +247,8 @@ const updateUIforLoginState = (user) => {
             document.getElementById('complete-slack-link-btn')?.click();
             return; // Stop the function here
         }
+        // This lifts the curtain once Firebase has decided where to send the user
+        document.body.classList.remove('loading');
         // --- END OF NEW LOGIC ---
 
         [signinLink, signupLink].forEach(el => el.classList.add('hide'));
@@ -277,6 +276,7 @@ const updateUIforLoginState = (user) => {
         applyUserPreferences({});
         renderAll();
     }
+    document.body.classList.remove('loading');
 };
 
 const applyUserPreferences = (prefs = {}) => {
@@ -302,6 +302,10 @@ const applyUserPreferences = (prefs = {}) => {
 
     // Apply theme and palette
     document.body.classList.toggle('dark-theme', userPreferences.theme === 'dark');
+    
+    // Save to local storage for the skeleton loader next time
+    localStorage.setItem('localTheme', userPreferences.theme);
+    // ---------------------
 
     if(themeToggle) themeToggle.checked = userPreferences.theme === 'light';
 
@@ -430,23 +434,62 @@ const listenForTasks = () => {
     if (!currentUser) return;
     if (unsubscribeTasks) unsubscribeTasks();
 
-    let isFirstLoad = true; // Prevents achievements from firing on initial page load
+    // 1. Set Loading Flag to TRUE immediately
+    isTaskLoading = true; 
 
+    // 2. Inject Skeletons (Only if in List Mode to avoid visual glitches in Board/Calendar)
+    const listContainer = document.getElementById('task-list-view');
+    if (listContainer && userPreferences.layout === 'list') {
+        listContainer.classList.remove('hide');
+        listContainer.innerHTML = Array(3).fill(0).map(() => `
+            <div class="task-skeleton">
+                <div class="skeleton sk-checkbox"></div>
+                <div class="sk-content">
+                    <div class="skeleton sk-title"></div>
+                    <div class="skeleton sk-tags"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    let isFirstLoad = true; 
+
+    // 3. Start Real-time Listener (No Timeout)
     unsubscribeTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('order', 'asc')
         .onSnapshot(snapshot => {
+            
+            // A. Logic for Achievements (tracking completed count)
             const oldCompletedCount = isFirstLoad ? 0 : allTasks.filter(t => t.status === 'completed').length;
             
+            // B. Update Global State
             allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
             const newCompletedCount = allTasks.filter(t => t.status === 'completed').length;
 
-            // If a task was just completed (and it's not the initial load), check for achievements
             if (!isFirstLoad && newCompletedCount > oldCompletedCount) {
                 checkForAchievements();
             }
             
-            renderAll();
-            isFirstLoad = false; // Set to false after the first run
+            // C. CRITICAL: Turn OFF loading flag immediately so renderListView can run
+            isTaskLoading = false; 
+            isFirstLoad = false;
+
+            // D. Render Real Data
+            renderAll(); 
+
+        }, (error) => {
+            // E. Real-world Error Handling
+            console.error("Error fetching tasks:", error);
+            
+            // Important: Turn off loading so the app doesn't freeze on skeletons
+            isTaskLoading = false; 
+            
+            // Optional: Show a toast notification if using your toast system
+            if (typeof showToast === 'function') {
+                showToast("Failed to sync tasks. Working offline.", "error");
+            }
+            
+            renderAll(); // Will likely render empty or cached data
         });
 };
 
@@ -701,6 +744,9 @@ const getFilteredTasks = () => {
 
 // --- RENDER LIST VIEW (Updated Labels: Assigned by / Shared by) ---
 const renderListView = () => {
+    // --- GUARD CLAUSE: Keep skeletons if loading ---
+    if (isTaskLoading) return; 
+
     if (!taskListView) return;
     const filteredTasks = getFilteredTasks();
     taskListView.innerHTML = '';
@@ -2643,6 +2689,49 @@ const setupNotifications = () => {
 
 
 // --- Utility Functions --- //
+// --- Global Toast Notification System --- //
+const showToast = (message, type = 'info') => {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    // 1. Create Toast Element
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    // 2. Set Icon based on type
+    let iconClass = 'fa-info-circle';
+    if (type === 'success') iconClass = 'fa-check-circle';
+    if (type === 'error') iconClass = 'fa-exclamation-triangle';
+
+    toast.innerHTML = `
+        <i class="fas ${iconClass}"></i>
+        <span>${message}</span>
+    `;
+
+    // 3. Add to DOM
+    container.appendChild(toast);
+
+    // 4. Trigger Animation (next frame)
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+
+    // 5. Auto Remove after 4 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        // Wait for slide-out animation to finish before removing from DOM
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 400);
+    }, 4000);
+};
+
+// Replace the old showFeedback function to use this new system
+// We keep the old function name so you don't have to refactor every line of code yet
+const showFeedback = (element, message, type) => {
+    // We ignore 'element' now since toasts are global
+    showToast(message, type);
+};
 // --- Reusable Modal Animation Helper ---
 const toggleModal = (modalId, action) => {
     const modal = document.getElementById(modalId);
@@ -2912,6 +3001,7 @@ document.addEventListener('DOMContentLoaded', () => {
             button.disabled = false;
         }
     }
+    document.body.classList.remove('loading');
 });
 document.addEventListener('click', async (e) => {
     // Check if a plan selection button was clicked
@@ -3759,15 +3849,22 @@ adminUserFilters?.addEventListener('click', (e) => {
     });
     handleSlackLinking();
 
-    // --- GALACTIC MODE LOGIC ---
+    // --- GALACTIC MODE LOGIC (FIXED) ---
     const galacticBtn = document.getElementById('animated-bg-btn');
     const globalPoints = document.getElementById('global-points-wrapper');
+    
+    // State to remember what theme the user had BEFORE entering space
+    let themeBeforeGalactic = localStorage.getItem('themeBeforeGalactic') || 'light'; 
 
     if (galacticBtn && globalPoints) {
-        // Check local storage for saved state
+        // Check local storage for saved Galactic state
         const isGalactic = localStorage.getItem('galacticMode') === 'true';
+        
         if (isGalactic) {
-            enableGalacticMode();
+            // Restore theme memory if we are reloading in Galactic mode
+            // (If we are reloading, the current "preference" is forced to dark by the line below, 
+            // so we trust the localStorage value for what it WAS)
+            enableGalacticMode(false); // false = don't overwrite saved memory
         }
 
         galacticBtn.addEventListener('click', () => {
@@ -3775,37 +3872,54 @@ adminUserFilters?.addEventListener('click', (e) => {
             if (isActive) {
                 disableGalacticMode();
             } else {
-                enableGalacticMode();
+                // Pass true to save the CURRENT state as the "Before" state
+                enableGalacticMode(true);
             }
         });
 
-        function enableGalacticMode() {
+        function enableGalacticMode(shouldSaveState = true) {
+            // 1. Memory: Save the current theme state before we force Dark Mode
+            if (shouldSaveState) {
+                themeBeforeGalactic = userPreferences.theme;
+                localStorage.setItem('themeBeforeGalactic', themeBeforeGalactic);
+            }
+
+            // 2. UI: Activate Galactic Visuals
             document.body.classList.add('galactic-mode');
-            document.body.classList.add('dark-theme'); // Force Dark Theme CSS
             globalPoints.classList.remove('hide');
             localStorage.setItem('galacticMode', 'true');
 
-            // SYNC TOGGLE: Uncheck it to show the "Moon/Night" icon
-            if (themeToggle) themeToggle.checked = false;
+            // 3. Theme: Force Dark Mode (if not already active)
+            // We DO NOT toggle the body class manually here if we can avoid it.
+            // We let applyUserPreferences handle the heavy lifting to keep state synced.
+            if (userPreferences.theme !== 'dark') {
+                userPreferences.theme = 'dark';
+                applyUserPreferences(userPreferences);
+                updateUserPreference('theme', 'dark');
+            }
             
-            // Update internal state so app knows we are in dark mode
-            userPreferences.theme = 'dark';
+            // 4. Update the Toggle Switch Visual (Unchecked = Dark/Moon)
+            if(themeToggle) themeToggle.checked = false;
         }
 
         function disableGalacticMode() {
+            // 1. UI: Deactivate Galactic Visuals
             document.body.classList.remove('galactic-mode');
-            
-            // Force Light Mode on disable as requested
-            document.body.classList.remove('dark-theme'); 
-            
             globalPoints.classList.add('hide');
             localStorage.setItem('galacticMode', 'false');
 
-            // SYNC TOGGLE: Check it to show the "Sun/Day" icon
-            if (themeToggle) themeToggle.checked = true;
-
-            // Update internal state so app knows we are back to light mode
-            userPreferences.theme = 'light';
+            // 2. Logic: Restore the Previous Theme
+            // If the user was Light ('light') before, we go back to Light.
+            // If the user was Dark ('dark') before, we STAY Dark.
+            if (themeBeforeGalactic === 'light') {
+                userPreferences.theme = 'light';
+                applyUserPreferences(userPreferences);
+                updateUserPreference('theme', 'light');
+                
+                // Update Toggle Switch Visual (Checked = Light/Sun)
+                if(themeToggle) themeToggle.checked = true;
+            } 
+            // If themeBeforeGalactic was 'dark', we do nothing because we are already in dark mode.
         }
     }
 });

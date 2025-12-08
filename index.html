@@ -2,13 +2,66 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Management App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <title>TaskMate | Focus, Track & Collaborate</title>
+    <meta name="title" content="TaskMate | Focus, Track & Collaborate">
+    <meta name="description" content="A powerful productivity tool with Focus Mode, Team Collaboration, and Advanced Analytics. Manage tasks efficiently.">
+    <meta name="theme-color" content="#4D7CFE">
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="taskmate-logo.jpg">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://to-do-list-app-b322d.web.app/">
+    <meta property="og:title" content="TaskMate | Focus & Collaborate">
+    <meta property="og:description" content="Boost your productivity with Focus Mode, Team Mode, and Smart Analytics.">
+    <meta property="og:image" content="social-preview.jpg">
+
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://to-do-list-app-b322d.web.app/">
+    <meta property="twitter:title" content="TaskMate | Focus & Collaborate">
+    <meta property="twitter:description" content="Boost your productivity with Focus Mode, Team Mode, and Smart Analytics.">
+    <meta property="twitter:image" content="social-preview.jpg">
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
-<body>
+<body class="loading">
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('localTheme');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            // Use saved preference if it exists, otherwise use system preference
+            if (savedTheme === 'dark' || (!savedTheme && systemDark)) {
+                document.body.classList.add('dark-theme');
+            }
+        })();
+    </script>
+    <div id="app-skeleton" class="app-skeleton">
+        <div class="skeleton-sidebar">
+            <div class="sk-brand"></div>
+            <div class="sk-nav-group">
+                <div class="sk-nav-item"></div>
+                <div class="sk-nav-item"></div>
+                <div class="sk-nav-item"></div>
+                <div class="sk-nav-item"></div>
+            </div>
+            <div class="sk-profile"></div>
+        </div>
+
+        <div class="skeleton-main">
+            <div class="sk-hero-card"></div>
+            <div class="sk-controls-bar"></div>
+            <div class="sk-grid">
+                <div class="sk-task-card"></div>
+                <div class="sk-task-card"></div>
+                <div class="sk-task-card"></div>
+            </div>
+        </div>
+    </div>
 
     <!-- NEW: Global Animated Background Wrapper (Hidden by default) -->
     <div id="global-points-wrapper" class="global-points-wrapper hide">
@@ -1217,6 +1270,7 @@
     <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
     <script src="https://unpkg.com/jspdf-autotable@3.5.23/dist/jspdf.plugin.autotable.js"></script>
 
+    <div id="toast-container"></div>
     <div id="offline-indicator" class="offline-indicator hide">You are currently offline. Changes will sync when you reconnect.</div>
 </body>
 </html>
