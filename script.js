@@ -25,7 +25,10 @@ const storage = firebase.storage();
 const messaging = firebase.messaging();
 
 // --- My DOM Elements --- //
-const signinPage = document.getElementById('signin-page'), signupPage = document.getElementById('signup-page');
+const authWrapper = document.getElementById('auth-wrapper');
+const authCard3d = document.getElementById('auth-card-3d');
+const flipSignupBtn = document.getElementById('trigger-flip-signup');
+const flipSigninBtn = document.getElementById('trigger-flip-signin');
 const todoPage = document.getElementById('todo-page'), profilePage = document.getElementById('profile-page'), adminPage = document.getElementById('admin-page'); // Add adminPage here
 const signinLink = document.getElementById('signin-link'), signupLink = document.getElementById('signup-link');
 const profileMenu = document.getElementById('profile-menu'), profileDropdown = document.querySelector('.profile-dropdown');
@@ -44,7 +47,9 @@ const statPending = document.getElementById('stat-pending');
 const themeToggle = document.getElementById('theme-toggle'), accentColorPicker = document.getElementById('accent-color-picker');
 const layoutSwitcher = document.getElementById('layout-switcher');
 const taskListView = document.getElementById('task-list-view'), taskBoardView = document.getElementById('task-board-view');
-const calendarView = document.getElementById('calendar-view'), addTaskBtn = document.getElementById('add-task-btn');
+const calendarView = document.getElementById('calendar-view');
+const addTaskBtn = document.getElementById('add-task-btn');
+const sidebarAddTaskBtn = document.getElementById('add-task-sidebar-btn'); // <--- ADD THIS
 const statusFilters = document.getElementById('status-filters'), categoryFilters = document.getElementById('category-filters');
 const priorityFilters = document.getElementById('priority-filters');
 const searchInput = document.getElementById('search-input');
@@ -68,7 +73,7 @@ const profileFeedback = document.getElementById('profile-feedback');
 const voiceAddTaskBtn = document.getElementById('voice-add-btn');
 const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
 const aiSuggestionBox = document.getElementById('ai-suggestion-box');
-const modeToggle = document.getElementById('mode-toggle-checkbox');
+const modeToggle = document.getElementById('team-mode-toggle');
 const badgeModal = document.getElementById('badge-modal');
 const badgeModalIcon = document.getElementById('badge-modal-icon');
 const badgeModalName = document.getElementById('badge-modal-name');
@@ -80,7 +85,7 @@ const exportPdfBtn = document.getElementById('export-pdf-btn');
 
 // --- App State --- //
 let allTasks = [], currentUser = null, currentUserProfile = {};
-let userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly', palette: 'default' };
+let userPreferences = { theme: 'light', layout: 'list', accentColor: '#4D7CFE', calendarDefault: 'monthly' };
 let currentStatusFilter = 'all', currentCategoryFilter = 'all', currentPriorityFilter = 'all', currentSearchTerm = '';
 let selectedDateFilter = null;
 let editingTaskId = null, detailTaskId = null;
@@ -91,7 +96,14 @@ let originalAttachmentsBeforeEdit = [];
 let calendarDate = new Date();
 let calendarMode = userPreferences.calendarDefault;
 let unsubscribeTasks, unsubscribeProfile, unsubscribeComments, unsubscribeUpdateLog;
-const accentColors = ['#d4a373', '#f07167', '#00afb9', '#9d4edd', '#fb8500'];
+// New Modern Accent Palette
+const accentColors = [
+    '#4D7CFE', // Brand Blue
+    '#FF57B9', // Neon Pink
+    '#00E096', // Mint Green
+    '#8854D0', // Deep Purple
+    '#FF9F43'  // Vibrant Orange
+];
 let conversationCreationLocks = new Map();
 let isPostingComment = false;
 let activeListenerToken = null; 
@@ -155,19 +167,68 @@ let datePicker, timePicker, dateFilterInstance;
 
 // --- Page & UI Management --- //
 const showPage = (pageId) => {
-    // Find analyticsPage here, only when it's needed.
-    const analyticsPage = document.getElementById('analytics-page'); 
+    // 1. Hide all main containers
+    const pages = [
+        'auth-wrapper', 
+        'todo-page', 'profile-page', 
+        'analytics-page', 'admin-page', 'link-slack-page'
+    ];
 
-    // Use a filter to remove any pages that might not exist yet.
-    [signinPage, signupPage, todoPage, profilePage, analyticsPage, adminPage] // Add adminPage here
-        .filter(page => page)
-        .forEach(page => page.classList.add('hide'));
+    pages.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hide');
+    });
 
-    document.getElementById(pageId).classList.remove('hide');
-    
-    const isSubPage = pageId === 'profile-page' || pageId === 'analytics-page';
-    backBtn.classList.toggle('hide', !isSubPage);
-    logo.classList.toggle('hide', isSubPage);
+    // 2. Clear sidebar active states
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => item.classList.remove('active'));
+
+    // --- AUTH PAGES LOGIC ---
+    if (pageId === 'signin-page' || pageId === 'signup-page') {
+        // A. Add 'auth-mode' class to body to hide sidebar via CSS
+        document.body.classList.add('auth-mode');
+
+        // Show the wrapper
+        if (authWrapper) authWrapper.classList.remove('hide');
+        
+        // Handle the flip animation
+        if (authCard3d) {
+            if (pageId === 'signup-page') {
+                authCard3d.classList.add('flipped');
+            } else {
+                authCard3d.classList.remove('flipped');
+            }
+        }
+
+        // Hide back button/Show logo for auth pages (optional visual tweaks)
+        if(backBtn) backBtn.classList.add('hide');
+        if(logo) logo.classList.remove('hide');
+    } 
+    // --- STANDARD PAGES LOGIC ---
+    else {
+        // B. Remove 'auth-mode' class to show sidebar
+        document.body.classList.remove('auth-mode');
+
+        const targetPage = document.getElementById(pageId);
+        if (targetPage) {
+            targetPage.classList.remove('hide');
+
+            // Handle Sidebar/Logo visibility
+            const isSubPage = pageId === 'profile-page' || pageId === 'analytics-page';
+            if(backBtn) backBtn.classList.toggle('hide', !isSubPage);
+            if(logo) logo.classList.toggle('hide', isSubPage);
+
+            // Update Sidebar Active State
+            if (pageId === 'todo-page') {
+                document.getElementById('overview-link')?.classList.add('active');
+            } else if (pageId === 'analytics-page') {
+                document.getElementById('analytics-link')?.classList.add('active');
+            } else if (pageId === 'admin-page') {
+                document.getElementById('admin-link')?.classList.add('active');
+            }
+        } else {
+            console.error(`showPage Error: Could not find page with ID '${pageId}'`);
+        }
+    }
 };
 
 const showFeedback = (element, message, type) => {
@@ -179,6 +240,7 @@ const showFeedback = (element, message, type) => {
 const updateUIforLoginState = (user) => {
     currentUser = user;
     if (user) {
+        document.getElementById('team-mode-container')?.classList.remove('hide');
         // --- NEW LOGIC ---
         // If a user just logged in AND we were trying to link a Slack account,
         // go back to the linking page and auto-click the button.
@@ -197,6 +259,7 @@ const updateUIforLoginState = (user) => {
         listenForTasks();
 
     } else {
+        document.getElementById('team-mode-container')?.classList.add('hide');
         [signinLink, signupLink].forEach(el => el.classList.remove('hide'));
         profileMenu.classList.add('hide');
         // If there's a pending link, show the link page instead of the default signin page
@@ -217,23 +280,34 @@ const updateUIforLoginState = (user) => {
 };
 
 const applyUserPreferences = (prefs = {}) => {
-    userPreferences = { theme: 'light', layout: 'list', accentColor: '#d4a373', calendarDefault: 'monthly', palette: 'default', ...prefs };
+    // 1. Sanitize Color: If color is missing OR is the old brown, force Brand Blue
+    let safeAccentColor = prefs.accentColor;
+    if (!safeAccentColor || safeAccentColor === '#d4a373') {
+        safeAccentColor = '#4D7CFE';
+    }
+
+    userPreferences = { 
+        theme: 'light', 
+        layout: 'list', 
+        accentColor: safeAccentColor, // Use the sanitized color
+        calendarDefault: 'monthly', 
+        palette: 'default', 
+        ...prefs 
+    };
+    
+    // Ensure the internal object matches the sanitized version
+    userPreferences.accentColor = safeAccentColor; 
+
     calendarMode = userPreferences.calendarDefault;
 
     // Apply theme and palette
     document.body.classList.toggle('dark-theme', userPreferences.theme === 'dark');
-    
-    document.body.dataset.palette = userPreferences.palette || 'default';
 
-    if(themeToggle) themeToggle.checked = userPreferences.theme === 'dark';
+    if(themeToggle) themeToggle.checked = userPreferences.theme === 'light';
 
-    // Check the correct radio buttons
+    // Check inputs
     document.querySelectorAll('input[name="layout"]').forEach(input => {
         if(input.value === userPreferences.layout) input.checked = true;
-    });
-    
-    document.querySelectorAll('input[name="palette"]').forEach(input => {
-        if(input.value === (userPreferences.palette || 'default')) input.checked = true;
     });
 
     document.querySelectorAll('input[name="calendar-default"]').forEach(input => {
@@ -243,8 +317,12 @@ const applyUserPreferences = (prefs = {}) => {
     if(taskListView) taskListView.classList.toggle('hide', userPreferences.layout !== 'list');
     if(taskBoardView) taskBoardView.classList.toggle('hide', userPreferences.layout !== 'board');
     if (calendarView) calendarView.classList.toggle('hide', userPreferences.layout !== 'calendar');
+
+    // CSS Variable Updates
+    document.documentElement.style.setProperty('--brand-blue', userPreferences.accentColor);
     document.documentElement.style.setProperty('--primary-color', userPreferences.accentColor);
     document.documentElement.style.setProperty('--primary-hover', shadeColor(userPreferences.accentColor, -15));
+
     accentColorPicker?.querySelectorAll('.color-swatch').forEach(swatch => {
         swatch.classList.toggle('active', swatch.dataset.color === userPreferences.accentColor);
     });
@@ -265,56 +343,85 @@ const updateUserPreference = async (key, value) => {
 const listenForProfile = () => {
     if (!currentUser) return;
     if (unsubscribeProfile) unsubscribeProfile();
+
     unsubscribeProfile = db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
         if (doc.exists) {
+            // 1. Store the profile data globally
             currentUserProfile = { id: doc.id, ...doc.data() };
-            if(displayNameInput) displayNameInput.value = currentUserProfile.displayName || '';
-            const photoURL = currentUserProfile.photoURL || 'https://placehold.co/100x100/d4a373/fefae0?text=User';
-            if(profilePhotoPreview) profilePhotoPreview.src = photoURL;
-            if(menuProfilePhoto) menuProfilePhoto.src = photoURL;
 
-            // Add this logic to show/hide the admin link
+            currentUserProfile = { id: doc.id, ...doc.data() };
+
+            // --- NEW: Toggle Body Class for Premium Styling ---
+            const isPremium = currentUserProfile.subscription?.status === 'premium';
+            if (isPremium) {
+                document.body.classList.add('premium-user');
+            } else {
+                document.body.classList.remove('premium-user');
+            }
+
+            // 2. Get Name & Photo (with fallbacks)
+            const userName = currentUserProfile.displayName || currentUser.email.split('@')[0] || 'Friend';
+            let userPhoto = currentUserProfile.photoURL;
+
+            // If no photo, use the Brand Blue placeholder
+            // --- LOCAL IMAGE LOGIC ---
+            if (!userPhoto) {
+                userPhoto = 'default-user.jpg'; 
+            } 
+            // Clean up old external placeholders if they exist in the database
+            else if (userPhoto.includes('placehold.co')) {
+                userPhoto = 'default-user.jpg';
+            }
+            // --- UPDATE SIDEBAR ---
+            const sidebarNameEl = document.querySelector('.user-name'); // The text "My Account"
+            const sidebarRoleEl = document.querySelector('.user-role'); // The text "Free Plan"
+            const sidebarPhotoEl = document.getElementById('menu-profile-photo');
+            
+            if (sidebarNameEl) sidebarNameEl.textContent = userName;
+            if (sidebarPhotoEl) sidebarPhotoEl.src = userPhoto;
+            
+            // Update Role Text based on Premium Status
+            if (sidebarRoleEl) sidebarRoleEl.textContent = isPremium ? 'Premium' : 'Free Plan';
+
+            // --- UPDATE DASHBOARD HEADER (Gradient Card) ---
+            const headerGreetingEl = document.getElementById('header-greeting');
+            const headerPhotoEl = document.getElementById('header-profile-img');
+
+            if (headerGreetingEl) headerGreetingEl.textContent = `Hello, ${userName}`;
+            if (headerPhotoEl) headerPhotoEl.src = userPhoto;
+
+            // --- UPDATE SETTINGS FORM ---
+            const settingsNameInput = document.getElementById('profile-name');
+            const settingsPhotoPreview = document.getElementById('profile-photo-preview');
+            if (settingsNameInput && document.activeElement !== settingsNameInput) {
+                settingsNameInput.value = userName;
+            }
+            if (settingsPhotoPreview) settingsPhotoPreview.src = userPhoto;
+
+            // --- UPDATE ADMIN LINK VISIBILITY ---
             if (adminLink) {
                 adminLink.classList.toggle('hide', currentUserProfile.role !== 'admin');
             }
 
-            // --- ALL SUBSCRIPTION UI LOGIC ---
-            
-            // Get all the relevant UI elements
+            // --- HANDLE PREMIUM UI ELEMENTS ---
             const subStatusEl = document.getElementById('subscription-status');
             const planSelectionContainer = document.getElementById('plan-selection-container');
             const profilePhotoContainer = document.getElementById('profilePhotoContainer');
             const menuProfilePhotoContainer = document.getElementById('menuProfilePhotoContainer');
             const yearlyBadge = document.getElementById('yearly-premium-badge');
             const prioritySupportSection = document.getElementById('priority-support-section');
-
-            const isPremium = currentUserProfile.subscription?.status === 'premium';
             const isYearly = isPremium && currentUserProfile.subscription?.planId === YEARLY_PLAN_ID;
 
-            // 1. Show/Hide Premium Ring
             if (profilePhotoContainer) profilePhotoContainer.classList.toggle('premium-ring', isPremium);
             if (menuProfilePhotoContainer) menuProfilePhotoContainer.classList.toggle('premium-ring', isPremium);
+            if (subStatusEl) subStatusEl.textContent = isPremium ? 'You are on the Premium Plan. ✨' : 'You are currently on the Free Plan.';
+            if (planSelectionContainer) planSelectionContainer.classList.toggle('hide', isPremium);
+            if (yearlyBadge) yearlyBadge.classList.toggle('hide', !isYearly);
+            if (prioritySupportSection) prioritySupportSection.classList.toggle('hide', !isYearly);
 
-            // 2. Show/Hide Plan Selection vs. Status Text
-            if (subStatusEl) {
-                subStatusEl.textContent = isPremium ? 'You are on the Premium Plan. ✨' : 'You are currently on the Free Plan.';
-            }
-            if (planSelectionContainer) {
-                planSelectionContainer.classList.toggle('hide', isPremium); // Hide plan cards if already premium
-            }
-
-            // 3. Show/Hide "Premium Plus" Badge
-            if (yearlyBadge) {
-                yearlyBadge.classList.toggle('hide', !isYearly);
-            }
-
-            // 4. Show/Hide Priority Support Section
-            if (prioritySupportSection) {
-                prioritySupportSection.classList.toggle('hide', !isYearly);
-            }
-            // --- END OF SUBSCRIPTION UI LOGIC ---
-
+            // --- RE-RENDER TASKS (To update avatars on cards) ---
             applyUserPreferences(currentUserProfile.preferences);
+            renderAll(); 
         }
     });
 };
@@ -592,102 +699,148 @@ const getFilteredTasks = () => {
     });
 };
 
+// --- RENDER LIST VIEW (Updated Labels: Assigned by / Shared by) ---
 const renderListView = () => {
     if (!taskListView) return;
     const filteredTasks = getFilteredTasks();
     taskListView.innerHTML = '';
+    
     if (filteredTasks.length === 0) {
-        taskListView.innerHTML = `<p class="no-tasks">No tasks found. Try adjusting your filters!</p>`;
+        taskListView.innerHTML = `<div class="no-tasks">No tasks found.</div>`;
         return;
     }
+
+    // Smart Color Logic
+    const getBadgeColorClass = (category) => {
+        if (!category) return 'badge-purple';
+        const lower = category.toLowerCase();
+        if (['profitable', 'urgent', 'work', 'high'].some(k => lower.includes(k))) return 'badge-pink';
+        if (['ai', 'tech', 'personal', 'health'].some(k => lower.includes(k))) return 'badge-green';
+        if (['1 person', 'team', 'shopping', 'study'].some(k => lower.includes(k))) return 'badge-blue';
+        const colors = ['badge-pink', 'badge-green', 'badge-blue', 'badge-purple'];
+        let hash = 0;
+        for (let i = 0; i < category.length; i++) hash = category.charCodeAt(i) + ((hash << 5) - hash);
+        return colors[Math.abs(hash) % colors.length];
+    };
+
+    // Helper to extract name safely
+    const getUserName = (userObj) => userObj?.displayName || userObj?.name || userObj?.email?.split('@')[0] || 'Someone';
+
     filteredTasks.forEach(task => {
-        const taskItem = document.createElement('li');
-        const isCompleted = task.status === 'completed' || (task.assignedTo && task.assignedTo.status === 'completed');
-        taskItem.className = `task-item ${isCompleted ? 'completed' : ''}`;
-        taskItem.dataset.id = task.id;
-        taskItem.dataset.priority = task.priority || 'low';
+        const item = document.createElement('div');
+        const isCompleted = task.status === 'completed';
+        
+        item.className = `task-row-modern task-card-modern ${isCompleted ? 'completed' : ''}`;
+        item.dataset.id = task.id;
 
-        const deadlineDate = task.deadline ? new Date(task.deadline.seconds * 1000).toLocaleDateString() : '';
-        const deadlineTime = task.deadline ? new Date(task.deadline.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-
-        let teamTagHTML = '';
-        if (task.sharedBy) {
-            teamTagHTML = `<div class="team-tag shared-by"><i class="fas fa-user-friends"></i> Shared by ${task.sharedBy.name}</div>`;
-        } else if (task.assignedBy) {
-            teamTagHTML = `<div class="team-tag assigned-by"><i class="fas fa-user-check"></i> Assigned by ${task.assignedBy.name}</div>`;
-        } else if (task.assignedTo) {
-            if (task.assignedTo.status === 'completed') {
-                const completedDate = task.assignedTo.completedAt ? new Date(task.assignedTo.completedAt.seconds * 1000).toLocaleDateString() : '';
-                teamTagHTML = `<div class="team-tag assigned-to completed"><i class="fas fa-check-double"></i> Completed by ${task.assignedTo.name} on ${completedDate}</div>`;
-            } else {
-                teamTagHTML = `<div class="team-tag assigned-to"><i class="fas fa-user-clock"></i> Assigned to ${task.assignedTo.name}</div>`;
-            }
+        // 1. Prepare Data
+        const categoryName = task.category || 'General';
+        const badgeClass = getBadgeColorClass(categoryName);
+        const subtaskCount = task.subtasks ? task.subtasks.length : 0;
+        
+        // 2. Build Tag Strings
+        let deadlineHtml = '';
+        if (task.deadline) {
+            const dateStr = new Date(task.deadline.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            deadlineHtml = `<span class="badge badge-orange"><i class="far fa-clock"></i> ${dateStr}</span>`;
         }
 
-        taskItem.innerHTML = `
-            <div class="share-checkbox-wrapper"></div>
-            <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''}>
-            <div class="task-content">
-                <h3>${task.text}</h3>
-                <div class="task-meta">
-                    ${task.category ? `<span><i class="fas fa-tag"></i> ${task.category}</span>` : ''}
-                    ${deadlineDate ? `<span><i class="fas fa-calendar-alt"></i> ${deadlineDate}</span>` : ''}
-                    ${deadlineTime ? `<span><i class="fas fa-clock"></i> ${deadlineTime}</span>` : ''}
+        let assignedHtml = '';
+        if (task.assignedTo && task.assignedTo.email) {
+            // Task I assigned to someone else
+            const name = getUserName(task.assignedTo);
+            assignedHtml = `<span class="badge badge-teal"><i class="fas fa-user-check"></i> Assigned to ${name}</span>`;
+        } else if (task.assignedBy) {
+            // Task assigned to me by someone else
+            const name = getUserName(task.assignedBy);
+            assignedHtml = `<span class="badge badge-teal"><i class="fas fa-arrow-left"></i> Assigned by ${name}</span>`;
+        }
+
+        let sharedHtml = '';
+        if (task.sharedWith && task.sharedWith.length > 0) {
+            // Task I shared with others
+            const count = task.sharedWith.length;
+            sharedHtml = `<span class="badge badge-indigo"><i class="fas fa-share-alt"></i> Shared (${count})</span>`;
+        } else if (task.sharedBy) {
+            // Task shared with me
+            const name = getUserName(task.sharedBy);
+            sharedHtml = `<span class="badge badge-indigo"><i class="fas fa-share-alt"></i> Shared by ${name}</span>`;
+        }
+
+        // --- FIX: Wrapped the two checkboxes in 'task-left-controls' ---
+        // This ensures the CSS Grid sees them as ONE column, not two.
+        item.innerHTML = `
+            <div class="task-left-controls">
+                <div class="share-checkbox-wrapper"></div>
+                
+                <div class="custom-checkbox ${isCompleted ? 'checked' : ''}" title="Toggle Status">
+                    <i class="fas fa-check"></i>
                 </div>
-                ${teamTagHTML}
             </div>
-            <div class="task-actions">
-                <button class="comment-btn"><i class="fas fa-comments"></i></button>
-                <button class="edit-btn"><i class="fas fa-pencil-alt"></i></button>
-                <button class="delete-btn"><i class="fas fa-trash"></i></button>
+            
+            <div class="task-content-wrapper">
+                <span class="task-title">${task.text}</span>
+                <div class="task-tags-row">
+                    <span class="badge ${badgeClass}">${categoryName}</span>
+                    ${deadlineHtml}
+                    ${assignedHtml}
+                    ${sharedHtml}
+                    ${task.priority === 'high' ? '<span class="badge badge-pink">High</span>' : ''}
+                    ${subtaskCount > 0 ? `<span class="badge badge-gray"><i class="fas fa-list-ul"></i> ${subtaskCount}</span>` : ''}
+                </div>
+            </div>
+
+            <div class="task-meta-right">
+                <div class="card-actions-hover">
+                    <button class="icon-btn-simple comment-btn" title="Comments">
+                        <i class="far fa-comment-dots"></i>
+                    </button>
+                    <button class="icon-btn-simple edit-btn" title="Edit">
+                        <i class="fas fa-pencil-alt"></i>
+                    </button>
+                    <button class="icon-btn-simple delete-btn" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
         `;
-        taskListView.appendChild(taskItem);
+        
+        // Event Listeners
+        item.querySelector('.custom-checkbox').addEventListener('click', (e) => { e.stopPropagation(); toggleTaskStatus(task.id, !isCompleted); });
+        item.querySelector('.comment-btn').addEventListener('click', (e) => { e.stopPropagation(); openDetailModal(task.id); });
+        item.querySelector('.edit-btn').addEventListener('click', (e) => { e.stopPropagation(); openTaskModal(task); });
+        item.querySelector('.delete-btn').addEventListener('click', (e) => { 
+            e.stopPropagation(); 
+            if (confirm(`Delete "${task.text}"?`)) db.collection('users').doc(currentUser.uid).collection('tasks').doc(task.id).delete(); 
+        });
+        item.addEventListener('click', () => openDetailModal(task.id));
+
+        taskListView.appendChild(item);
     });
 
-    if (typeof toggleSelectionCheckboxesVisibility === 'function' && typeof currentTeamAction !== 'undefined' && currentTeamAction) {
-        toggleSelectionCheckboxesVisibility(true, currentTeamAction);
-    }
+    new Sortable(taskListView, { animation: 150, handle: '.task-content-wrapper' });
+};
 
-    new Sortable(taskListView, {
-        animation: 150,
-        handle: '.task-content', // This makes the main content area the drag handle
-        onEnd: (evt) => {
-            const taskId = evt.item.dataset.id;
-            const prevTaskElement = evt.item.previousElementSibling;
-            const nextTaskElement = evt.item.nextElementSibling;
-
-            // Find the corresponding tasks in our local 'allTasks' array
-            const prevTask = prevTaskElement ? allTasks.find(t => t.id === prevTaskElement.dataset.id) : null;
-            const nextTask = nextTaskElement ? allTasks.find(t => t.id === nextTaskElement.dataset.id) : null;
-
-            // Calculate the new order value
-            const prevOrder = prevTask ? prevTask.order : 0;
-            const nextOrder = nextTask ? nextTask.order : Date.now() + 2000; // Add buffer for items dropped at the end
-
-            const newOrder = (prevOrder + nextOrder) / 2;
-
-            // Update the task's order in Firestore
-            db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ order: newOrder });
-        }
+// Helper to toggle status (since we removed the old checkbox input)
+const toggleTaskStatus = (taskId, newStatusBool) => {
+    const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
+    taskRef.update({
+        status: newStatusBool ? 'completed' : 'todo',
+        completedAt: newStatusBool ? firebase.firestore.FieldValue.serverTimestamp() : null
     });
 };
 
 
+// --- RENDER BOARD VIEW (Updated Labels: Assigned by / Shared by) ---
 const renderBoardView = () => {
     if (!taskBoardView) return;
     const filteredTasks = getFilteredTasks();
 
     taskBoardView.innerHTML = `
-        <div class="task-column"><h3>To-Do</h3><div class="task-cards" data-status="todo"></div></div>
-        <div class="task-column"><h3>In Progress</h3><div class="task-cards" data-status="inprogress"></div></div>
-        <div class="task-column"><h3>Completed</h3><div class="task-cards" data-status="completed"></div></div>
+        <div class="board-column"><div class="board-column-header"><div class="status-dot dot-todo"></div> To Do</div><div class="task-cards" data-status="todo"></div></div>
+        <div class="board-column"><div class="board-column-header"><div class="status-dot dot-progress"></div> In Progress</div><div class="task-cards" data-status="inprogress"></div></div>
+        <div class="board-column"><div class="board-column-header"><div class="status-dot dot-done"></div> Done</div><div class="task-cards" data-status="completed"></div></div>
     `;
-
-    if (filteredTasks.length === 0) {
-        taskBoardView.innerHTML = `<p class="no-tasks">No tasks found. Try adjusting your filters!</p>`;
-        return;
-    }
 
     const containers = {
         todo: taskBoardView.querySelector('.task-cards[data-status="todo"]'),
@@ -695,50 +848,100 @@ const renderBoardView = () => {
         completed: taskBoardView.querySelector('.task-cards[data-status="completed"]')
     };
 
+    const getBadgeColorClass = (category) => {
+        if (!category) return 'badge-purple';
+        const lower = category.toLowerCase();
+        if (['profitable', 'urgent', 'work', 'high'].some(k => lower.includes(k))) return 'badge-pink';
+        if (['ai', 'tech', 'personal', 'health'].some(k => lower.includes(k))) return 'badge-green';
+        if (['1 person', 'team', 'shopping', 'study'].some(k => lower.includes(k))) return 'badge-blue';
+        const colors = ['badge-pink', 'badge-green', 'badge-blue', 'badge-purple'];
+        let hash = 0;
+        for (let i = 0; i < category.length; i++) hash = category.charCodeAt(i) + ((hash << 5) - hash);
+        return colors[Math.abs(hash) % colors.length];
+    };
+
+    // Helper to extract name safely
+    const getUserName = (userObj) => userObj?.displayName || userObj?.name || userObj?.email?.split('@')[0] || 'Someone';
+
     filteredTasks.forEach(task => {
         const card = document.createElement('div');
-        card.className = 'task-card-board';
+        card.className = 'task-card-modern task-card-board-new';
         card.dataset.id = task.id;
-        card.dataset.priority = task.priority || 'low';
-        card.innerHTML = `<h4>${task.text}</h4><p>${task.category || ''}</p>`;
+        
+        const categoryName = task.category || 'General';
+        const badgeClass = getBadgeColorClass(categoryName);
+        const userAvatar = currentUserProfile.photoURL || 'https://placehold.co/20x20';
+
+        // Build HTML for extra tags
+        let deadlineHtml = '';
+        if (task.deadline) {
+            const dateStr = new Date(task.deadline.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            deadlineHtml = `<span class="badge badge-orange">${dateStr}</span>`;
+        }
+
+        let assignedHtml = '';
+        if (task.assignedTo && task.assignedTo.email) {
+            const name = getUserName(task.assignedTo);
+            assignedHtml = `<span class="badge badge-teal" title="Assigned to ${name}">To: ${name}</span>`;
+        } else if (task.assignedBy) {
+            const name = getUserName(task.assignedBy);
+            assignedHtml = `<span class="badge badge-teal" title="Assigned by ${name}">Assigned by ${name}</span>`;
+        }
+
+        let sharedHtml = '';
+        if (task.sharedWith && task.sharedWith.length > 0) {
+            sharedHtml = `<span class="badge badge-indigo">Shared (${task.sharedWith.length})</span>`;
+        } else if (task.sharedBy) {
+            const name = getUserName(task.sharedBy);
+            sharedHtml = `<span class="badge badge-indigo" title="Shared by ${name}">Shared by ${name}</span>`;
+        }
+
+        card.innerHTML = `
+            <div class="card-top-tags">
+                <span class="badge ${badgeClass}">${categoryName}</span>
+                ${deadlineHtml}
+                ${assignedHtml}
+                ${sharedHtml}
+                ${task.subtasks && task.subtasks.length > 0 ? `<span class="badge badge-gray"><i class="fas fa-tasks"></i> ${task.subtasks.length}</span>` : ''}
+            </div>
+            
+            <div class="card-title">${task.text}</div>
+            
+            <div class="card-footer">
+                <div class="card-user">
+                    <img src="${userAvatar}" style="width:16px; height:16px; border-radius:50%;">
+                    <span>${currentUserProfile.displayName || 'Me'}</span>
+                </div>
+                <div class="priority-tag ${task.priority === 'high' ? 'priority-high' : ''}">
+                    ${task.priority}
+                </div>
+            </div>
+            
+            <div style="position:absolute; top: 10px; right: 10px;" class="card-actions-hover">
+                <button class="icon-btn-simple delete-btn" style="font-size:0.8rem;"><i class="fas fa-times"></i></button>
+            </div>
+        `;
+        
+        card.addEventListener('click', (e) => {
+            if(!e.target.closest('.delete-btn')) openDetailModal(task.id);
+        });
+        
+        card.querySelector('.delete-btn').addEventListener('click', (e) => {
+             e.stopPropagation();
+             if (confirm(`Delete "${task.text}"?`)) db.collection('users').doc(currentUser.uid).collection('tasks').doc(task.id).delete();
+        });
+
         const container = containers[task.status || 'todo'];
         if (container) container.appendChild(card);
     });
-    
-    // NEW SortableJS implementation for all columns
+
     taskBoardView.querySelectorAll('.task-cards').forEach(column => {
         new Sortable(column, {
-            group: 'board-tasks', // This allows dragging cards between columns
-            animation: 150,
+            group: 'board-tasks', animation: 150,
             onEnd: async (evt) => {
                 const taskId = evt.item.dataset.id;
                 const newStatus = evt.to.dataset.status;
-                const oldStatus = evt.from.dataset.status;
-
-                const prevTaskElement = evt.item.previousElementSibling;
-                const nextTaskElement = evt.item.nextElementSibling;
-                
-                const prevTask = prevTaskElement ? allTasks.find(t => t.id === prevTaskElement.dataset.id) : null;
-                const nextTask = nextTaskElement ? allTasks.find(t => t.id === nextTaskElement.dataset.id) : null;
-                
-                const prevOrder = prevTask ? prevTask.order : 0;
-                const nextOrder = nextTask ? nextTask.order : Date.now() + 2000;
-                
-                const newOrder = (prevOrder + nextOrder) / 2;
-
-                // Update both order and status in a single operation
-                const taskRef = db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId);
-                await taskRef.update({ 
-                    order: newOrder,
-                    status: newStatus 
-                });
-
-                // If status changed, log the update
-                if (newStatus !== oldStatus) {
-                    const task = allTasks.find(t => t.id === taskId);
-                    let conversationId = task.conversationId || await createConversationForTask(taskId);
-                    if (conversationId) addUpdateLog(conversationId, 'status', { oldValue: oldStatus, newValue: newStatus });
-                }
+                if (evt.from !== evt.to) db.collection('users').doc(currentUser.uid).collection('tasks').doc(taskId).update({ status: newStatus });
             }
         });
     });
@@ -747,85 +950,143 @@ const renderBoardView = () => {
 const renderCalendarView = () => {
     if (!calendarView) return;
     const year = calendarDate.getFullYear(), month = calendarDate.getMonth(), day = calendarDate.getDate();
+    const today = new Date(); // To highlight today
 
+    // Update Header
     calendarView.innerHTML = `
         <div class="calendar-header">
              <div class="calendar-mode-toggle">
                 <button data-mode="monthly" class="toggle-btn ${calendarMode === 'monthly' ? 'active' : ''}">Month</button>
                 <button data-mode="weekly" class="toggle-btn ${calendarMode === 'weekly' ? 'active' : ''}">Week</button>
             </div>
-            <button id="prev-btn"><i class="fas fa-chevron-left"></i></button>
-            <h2 id="calendar-title"></h2>
-            <button id="next-btn"><i class="fas fa-chevron-right"></i></button>
+            <div style="display:flex; align-items:center; gap: 1rem;">
+                <button id="prev-btn" class="calendar-nav-btn"><i class="fas fa-chevron-left"></i></button>
+                <h2 id="calendar-title"></h2>
+                <button id="next-btn" class="calendar-nav-btn"><i class="fas fa-chevron-right"></i></button>
+            </div>
         </div>
         <div id="calendar-grid-main" class="calendar-grid"></div>
     `;
 
     const grid = document.getElementById('calendar-grid-main'), title = document.getElementById('calendar-title');
 
+    // --- Helper to Render a Single Day Cell ---
+    const renderDay = (dateObj, isOtherMonth = false) => {
+        const dateStr = dateObj.toDateString();
+        const isToday = dateStr === today.toDateString();
+        
+        const dayCell = document.createElement('div');
+        
+        // Find tasks for this specific day
+        const tasksForDay = allTasks.filter(task => {
+            if (!task.deadline) return false;
+            return new Date(task.deadline.seconds * 1000).toDateString() === dateStr;
+        });
+
+        const hasTasks = tasksForDay.length > 0;
+
+        // Apply Gradient if it's Today OR has tasks
+        const useGradient = (isToday || hasTasks) && !isOtherMonth;
+        
+        dayCell.className = `day-cell ${isOtherMonth ? 'other-month' : ''} ${useGradient ? 'gradient-bg' : ''} ${isToday ? 'is-today' : ''}`;
+        
+        dayCell.innerHTML = `<div class="day-number">${dateObj.getDate()}</div><div class="calendar-tasks"></div>`;
+        grid.appendChild(dayCell);
+
+        const tasksContainer = dayCell.querySelector('.calendar-tasks');
+
+        // Logic for "Plan Your Day" Message
+        if (isToday && !hasTasks) {
+            tasksContainer.innerHTML = `
+                <div class="empty-day-message">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Plan your day</span>
+                </div>
+            `;
+        } else {
+            // Render Tasks
+            tasksForDay.forEach(task => {
+                const event = document.createElement('div');
+                const isCompleted = task.status === 'completed';
+                // If the background is gradient, don't use 'completed' grey style, keep it white/clean
+                const completeClass = (isCompleted && !useGradient) ? 'completed' : '';
+                
+                event.className = `calendar-task-event ${completeClass}`;
+                event.textContent = task.text;
+                event.title = task.text; 
+                if(isCompleted && useGradient) {
+                    event.style.opacity = '0.7'; 
+                    event.style.textDecoration = 'line-through';
+                }
+
+                event.addEventListener('click', (e) => {
+                    e.stopPropagation(); 
+                    openDetailModal(task.id);
+                });
+                tasksContainer.appendChild(event);
+            });
+        }
+        
+        // Click to Add Task
+        if (!isOtherMonth) {
+            dayCell.addEventListener('click', (e) => {
+                if(e.target === dayCell || e.target.closest('.day-number') || e.target.closest('.empty-day-message')) {
+                    openTaskModal();
+                    if(datePicker) datePicker.setDate(dateObj);
+                }
+            });
+        }
+    };
+
+    // --- WEEKLY VIEW LOGIC ---
     if (calendarMode === 'weekly') {
         const weekStart = new Date(calendarDate);
-        weekStart.setDate(day - calendarDate.getDay());
+        weekStart.setDate(day - calendarDate.getDay()); // Start on Sunday
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
-        title.textContent = `${weekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`;
+        
+        title.textContent = `${weekStart.toLocaleDateString(undefined, {month:'short', day:'numeric'})} - ${weekEnd.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})}`;
         grid.classList.add('weekly-view');
+        
         ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => grid.insertAdjacentHTML('beforeend', `<div class="calendar-day-header">${d}</div>`));
+        
         for (let i = 0; i < 7; i++) {
             const currentDay = new Date(weekStart);
             currentDay.setDate(weekStart.getDate() + i);
-            const dayCell = document.createElement('div');
-            dayCell.className = 'day-cell';
-            dayCell.innerHTML = `<div class="day-number">${currentDay.getDate()}</div><div class="calendar-tasks"></div>`;
-            grid.appendChild(dayCell);
-
-            const tasksForDay = allTasks.filter(task => {
-                if (!task.deadline) return false;
-                return new Date(task.deadline.seconds * 1000).toDateString() === currentDay.toDateString();
-            });
-            const tasksContainer = dayCell.querySelector('.calendar-tasks');
-            tasksForDay.forEach(task => {
-                const event = document.createElement('div');
-                event.className = 'calendar-task-event';
-                event.textContent = task.text;
-                event.addEventListener('click', () => openDetailModal(task.id));
-                tasksContainer.appendChild(event);
-            });
+            renderDay(currentDay);
         }
-        document.getElementById('prev-btn').onclick = () => { calendarDate.setDate(day - 7); renderCalendarView(); };
-        document.getElementById('next-btn').onclick = () => { calendarDate.setDate(day + 7); renderCalendarView(); };
-    } else { // Monthly View
+        
+        document.getElementById('prev-btn').onclick = () => { calendarDate.setDate(calendarDate.getDate() - 7); renderCalendarView(); };
+        document.getElementById('next-btn').onclick = () => { calendarDate.setDate(calendarDate.getDate() + 7); renderCalendarView(); };
+
+    } else { 
+        // --- MONTHLY VIEW LOGIC ---
         title.textContent = `${calendarDate.toLocaleString('default', { month: 'long' })} ${year}`;
         grid.classList.remove('weekly-view');
+        
         const firstDayOfMonth = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+        // Headers
         ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => grid.insertAdjacentHTML('beforeend', `<div class="calendar-day-header">${d}</div>`));
-        for (let i = 0; i < firstDayOfMonth; i++) grid.insertAdjacentHTML('beforeend', '<div class="day-cell other-month"></div>');
-
-        for (let i = 1; i <= daysInMonth; i++) {
-            const dayCell = document.createElement('div');
-            dayCell.className = 'day-cell';
-            dayCell.innerHTML = `<div class="day-number">${i}</div><div class="calendar-tasks"></div>`;
-            grid.appendChild(dayCell);
-            const tasksForDay = allTasks.filter(task => {
-                if (!task.deadline) return false;
-                const taskDate = new Date(task.deadline.seconds * 1000);
-                return taskDate.getFullYear() === year && taskDate.getMonth() === month && taskDate.getDate() === i;
-            });
-            const tasksContainer = dayCell.querySelector('.calendar-tasks');
-            tasksForDay.forEach(task => {
-                const event = document.createElement('div');
-                event.className = 'calendar-task-event';
-                event.textContent = task.text;
-                event.addEventListener('click', () => openDetailModal(task.id));
-                tasksContainer.appendChild(event);
-            });
+        
+        // Empty slots for previous month
+        for (let i = 0; i < firstDayOfMonth; i++) {
+            const prevMonthDay = new Date(year, month, 0 - (firstDayOfMonth - 1 - i));
+            renderDay(prevMonthDay, true); // Render as 'other-month'
         }
+
+        // Days of current month
+        for (let i = 1; i <= daysInMonth; i++) {
+            const currentDay = new Date(year, month, i);
+            renderDay(currentDay);
+        }
+        
         document.getElementById('prev-btn').onclick = () => { calendarDate.setMonth(month - 1); renderCalendarView(); };
         document.getElementById('next-btn').onclick = () => { calendarDate.setMonth(month + 1); renderCalendarView(); };
     }
 
+    // Toggle Listener
     calendarView.querySelector('.calendar-mode-toggle').addEventListener('click', (e) => {
         if (e.target.matches('.toggle-btn')) {
             calendarMode = e.target.dataset.mode;
@@ -836,14 +1097,20 @@ const renderCalendarView = () => {
 
 const renderCategoryFilters = () => {
     if (!categoryFilters) return;
+    
+    // Get unique categories
     const categories = [...new Set(allTasks.map(task => task.category).filter(Boolean))];
-    let buttonsHTML = `<button class="filter-btn ${currentCategoryFilter === 'all' ? 'active' : ''}" data-filter="all">All Categories</button>`;
     if (allTasks.some(t => t.category === 'Assigned')) {
         if (!categories.includes('Assigned')) categories.unshift('Assigned');
     }
+    
+    // Generate Buttons with 'pill-btn' class
+    let buttonsHTML = `<button class="pill-btn ${currentCategoryFilter === 'all' ? 'active' : ''}" data-filter="all">All</button>`;
+    
     categories.forEach(cat => {
-        buttonsHTML += `<button class="filter-btn ${currentCategoryFilter === cat ? 'active' : ''}" data-filter="${cat}">${cat}</button>`;
+        buttonsHTML += `<button class="pill-btn ${currentCategoryFilter === cat ? 'active' : ''}" data-filter="${cat}">${cat}</button>`;
     });
+    
     categoryFilters.innerHTML = buttonsHTML;
 };
 
@@ -855,53 +1122,85 @@ const updateTaskCounters = () => {
     // Calculate the productivity score
     const score = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    // Update the DOM elements
+    // Update the Mini Stats
     if (statTotal) statTotal.textContent = total;
     if (statCompleted) statCompleted.textContent = completed;
     if (statPending) statPending.textContent = pending;
 
-    // Find and update the new score element
+    // Update the Progress Bar
     const statScore = document.getElementById('stat-score');
+    const barFill = document.getElementById('prod-bar-fill');
+    
     if (statScore) statScore.textContent = `${score}%`;
+    if (barFill) {
+        // Delay slightly for animation effect
+        setTimeout(() => {
+            barFill.style.width = `${score}%`;
+        }, 100);
+        
+        // Dynamic Color for the bar based on score
+        if(score < 30) barFill.style.background = 'linear-gradient(90deg, #EF4444, #F87171)'; // Red
+        else if(score < 70) barFill.style.background = 'linear-gradient(90deg, #F59E0B, #FBBF24)'; // Orange
+        else barFill.style.background = 'linear-gradient(135deg, #FF57B9 0%, #A766FF 100%)'; // Brand Gradient
+    }
 };
 
 const renderSimplePersonalAnalytics = () => {
-    // 1. Get the DOM elements for the report numbers
-    const dailyCountEl = document.getElementById('daily-completed-count');
-    const weeklyCountEl = document.getElementById('weekly-completed-count');
+    const container = document.getElementById('personal-analytics-container');
+    if (!container) return;
 
-    // 2. Define the date ranges
+    // 1. Define Date Ranges
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Today at 00:00
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart = new Date(todayStart);
-    weekStart.setDate(todayStart.getDate() - todayStart.getDay()); // Start of the current week (Sunday)
+    weekStart.setDate(todayStart.getDate() - todayStart.getDay());
 
-    // 3. Filter the tasks based on their 'completedAt' timestamp
-    const tasksCompletedToday = allTasks.filter(task => 
-        task.completedAt && task.completedAt.toDate() >= todayStart
-    );
-    
-    const tasksCompletedThisWeek = allTasks.filter(task => 
-        task.completedAt && task.completedAt.toDate() >= weekStart
-    );
+    // 2. Filter Tasks
+    const tasksCompletedToday = allTasks.filter(task => task.completedAt && task.completedAt.toDate() >= todayStart).length;
+    const tasksCompletedThisWeek = allTasks.filter(task => task.completedAt && task.completedAt.toDate() >= weekStart).length;
 
-    // 4. Update the HTML with the calculated counts
-    if (dailyCountEl) {
-        dailyCountEl.textContent = tasksCompletedToday.length;
-    }
-    if (weeklyCountEl) {
-        weeklyCountEl.textContent = tasksCompletedThisWeek.length;
-    }
+    // 3. Render Modern Cards
+    container.innerHTML = `
+        <div class="analytics-grid">
+            <div class="report-card">
+                <div class="report-icon icon-daily">
+                    <i class="fas fa-sun"></i>
+                </div>
+                <div class="report-content">
+                    <h3>Today's Focus</h3>
+                    <div class="stat-number">${tasksCompletedToday}</div>
+                    <small style="color: var(--text-secondary);">Tasks completed</small>
+                </div>
+            </div>
+
+            <div class="report-card">
+                <div class="report-icon icon-weekly">
+                    <i class="fas fa-calendar-week"></i>
+                </div>
+                <div class="report-content">
+                    <h3>Weekly Progress</h3>
+                    <div class="stat-number">${tasksCompletedThisWeek}</div>
+                    <small style="color: var(--text-secondary);">Tasks completed</small>
+                </div>
+            </div>
+        </div>
+    `;
 };
 
 // --- NEW: Advanced Personal Analytics for Yearly Users ---
 const loadAndRenderAdvancedPersonalAnalytics = async () => {
     const container = document.getElementById('personal-analytics-container');
     if (!container || !currentUser) return;
-    container.innerHTML = `<p>Loading advanced analytics...</p>`;
+    
+    // Aesthetic Loading State
+    container.innerHTML = `
+        <div class="analytics-loading">
+            <i class="fas fa-circle-notch fa-spin"></i>
+            <p>Gathering your insights...</p>
+        </div>`;
 
     try {
-        // --- 1. Query the user's OWN completed tasks from the last 30 days ---
+        // --- 1. Query Data (Last 30 Days) ---
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         const thirtyDaysAgoTimestamp = firebase.firestore.Timestamp.fromDate(thirtyDaysAgo);
@@ -914,14 +1213,18 @@ const loadAndRenderAdvancedPersonalAnalytics = async () => {
             
         const completedTasks = snapshot.docs.map(doc => doc.data());
 
-        // --- 2. Process data for the chart ---
-        const dailyCounts = {}; // e.g., {"10/29/2025": 5, "10/30/2025": 2}
-        for (let i = 0; i <= 30; i++) { // Pre-fill last 30 days with 0
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            dailyCounts[date.toLocaleDateString()] = 0;
+        // --- 2. Process Data ---
+        const dailyCounts = {}; 
+        for (let i = 0; i < 30; i++) { 
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            dailyCounts[d.toLocaleDateString()] = 0;
         }
 
+        let currentStreak = 0;
+        let streakBroken = false;
+        // Simple streak logic based on processed data
+        
         completedTasks.forEach(task => {
             if (task.completedAt) {
                 const dateString = task.completedAt.toDate().toLocaleDateString();
@@ -931,57 +1234,131 @@ const loadAndRenderAdvancedPersonalAnalytics = async () => {
             }
         });
 
-        // Sort data for the chart
+        // Sort for Chart
         const sortedData = Object.entries(dailyCounts).sort((a, b) => new Date(a[0]) - new Date(b[0]));
-        const chartLabels = sortedData.map(entry => entry[0]);
+        const chartLabels = sortedData.map(entry => {
+            const d = new Date(entry[0]);
+            return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+        });
         const chartData = sortedData.map(entry => entry[1]);
 
-        // --- 3. Render the advanced UI ---
+        // Calculate Insights
+        const totalCompleted = completedTasks.length;
+        const dailyAverage = (totalCompleted / 30).toFixed(1);
+        const mostProductiveDayVal = Math.max(...chartData);
+
+        // --- 3. Render Premium HTML Structure ---
         container.innerHTML = `
-            <div class="stats-container" style="margin-bottom: 2rem;">
-                <div class="stat-card"><h4>Tasks Completed (Last 30 Days)</h4><p>${completedTasks.length}</p></div>
-                <div class="stat-card"><h4>Average per Day</h4><p>${(completedTasks.length / 30).toFixed(1)}</p></div>
-            </div>
-            <div class="chart-container">
-                <canvas id="personal-analytics-chart"></canvas>
+            <div class="premium-analytics-wrapper">
+                <!-- Insight Cards -->
+                <div class="analytics-grid">
+                    <div class="report-card premium-card">
+                        <div class="report-icon icon-gradient-1"><i class="fas fa-check-circle"></i></div>
+                        <div class="report-content">
+                            <h3>30-Day Total</h3>
+                            <div class="stat-number gradient-text">${totalCompleted}</div>
+                            <small>Tasks Completed</small>
+                        </div>
+                    </div>
+                    
+                    <div class="report-card premium-card">
+                        <div class="report-icon icon-gradient-2"><i class="fas fa-chart-line"></i></div>
+                        <div class="report-content">
+                            <h3>Daily Avg</h3>
+                            <div class="stat-number gradient-text">${dailyAverage}</div>
+                            <small>Tasks / Day</small>
+                        </div>
+                    </div>
+
+                    <div class="report-card premium-card">
+                        <div class="report-icon icon-gradient-3"><i class="fas fa-fire"></i></div>
+                        <div class="report-content">
+                            <h3>Peak Day</h3>
+                            <div class="stat-number gradient-text">${mostProductiveDayVal}</div>
+                            <small>Tasks in one day</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- The Big Chart -->
+                <div class="advanced-chart-wrapper premium-chart-box">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-wave-square"></i> Activity Flow</h3>
+                        <span class="badge badge-purple">Last 30 Days</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="personal-analytics-chart"></canvas>
+                    </div>
+                </div>
             </div>
         `;
 
-        // --- 4. Create the chart ---
+        // --- 4. Chart.js Config with Gradients ---
         const ctx = document.getElementById('personal-analytics-chart').getContext('2d');
-        if (analyticsChart) { // Reuse the same chart variable
-            analyticsChart.destroy();
-        }
+        
+        // Create Gradient Fill
+        const gradientFill = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientFill.addColorStop(0, 'rgba(167, 102, 255, 0.5)'); // Brand Purple High
+        gradientFill.addColorStop(1, 'rgba(167, 102, 255, 0.0)'); // Fade to transparent
+
+        // Check Theme for Text Color
+        const isDark = document.body.classList.contains('dark-theme');
+        const textColor = isDark ? '#A0A0A0' : '#6B7280';
+        const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+
+        if (analyticsChart) analyticsChart.destroy();
+        
         analyticsChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: chartLabels,
                 datasets: [{
-                    label: 'Tasks Completed',
+                    label: 'Tasks',
                     data: chartData,
-                    backgroundColor: 'rgba(212, 163, 115, 0.2)',
-                    borderColor: 'rgba(212, 163, 115, 1)',
-                    borderWidth: 2,
+                    backgroundColor: gradientFill,
+                    borderColor: '#A766FF', // Brand Purple Line
+                    borderWidth: 3,
+                    pointBackgroundColor: '#FFFFFF',
+                    pointBorderColor: '#A766FF',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
                     fill: true,
-                    tension: 0.1
+                    tension: 0.4 // Smooth curves
                 }]
             },
             options: {
-                scales: { y: { beginAtZero: true } },
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    title: {
-                        display: true,
-                        text: 'Your Task Completion Trend (Last 30 Days)'
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: isDark ? '#333' : '#FFF',
+                        titleColor: isDark ? '#FFF' : '#333',
+                        bodyColor: isDark ? '#FFF' : '#333',
+                        borderColor: '#A766FF',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: false,
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: gridColor },
+                        ticks: { color: textColor, font: { family: 'Poppins' } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: textColor, font: { family: 'Poppins' } }
                     }
                 }
             }
         });
 
     } catch (error) {
-        console.error("Error loading advanced personal analytics:", error);
-        container.innerHTML = `<p class="feedback error">Could not load your analytics data.</p>`;
+        console.error("Error loading advanced analytics:", error);
+        container.innerHTML = `<p class="feedback error">Could not load insights.</p>`;
     }
 };
 
@@ -1246,75 +1623,111 @@ const loadAndRenderAnalytics = async () => {
     const container = document.getElementById('analytics-container');
     if (!container) return;
 
+    // Use a skeleton loader or spinner while fetching
+    container.innerHTML = `<p style="text-align:center; color:var(--text-secondary);">Updating live metrics...</p>`;
+
     try {
         const snapshot = await db.collection('system_analytics').orderBy('date', 'desc').limit(7).get();
 
         if (snapshot.empty) {
-            container.innerHTML = `<p>No analytics data found yet. The first report will be generated within 24 hours.</p>`;
+            container.innerHTML = `<div class="analytics-empty">No analytics data generated yet.</div>`;
             return;
         }
         
         const reports = snapshot.docs.map(doc => doc.data());
         const latestReport = reports[0];
 
+        // --- NEW MODERN CARD LAYOUT ---
         container.innerHTML = `
-            <div class="stats-container" style="margin-bottom: 2rem;">
-                <div class="stat-card"><h4>Total Users</h4><p id="analytics-total-users">0</p></div>
-                <div class="stat-card"><h4>New Users (24h)</h4><p id="analytics-new-users">0</p></div>
-                <div class="stat-card"><h4>Total Tasks</h4><p id="analytics-total-tasks">0</p></div>
-                <div class="stat-card"><h4>Tasks Completed</h4><p id="analytics-completed-tasks">0</p></div>
+            <div class="admin-stats-grid">
+                <div class="report-card">
+                    <div class="report-icon icon-users"><i class="fas fa-users"></i></div>
+                    <div class="report-content">
+                        <h3>Total Users</h3>
+                        <div class="stat-number">${latestReport.totalUsers}</div>
+                    </div>
+                </div>
+
+                <div class="report-card">
+                    <div class="report-icon icon-new"><i class="fas fa-user-plus"></i></div>
+                    <div class="report-content">
+                        <h3>New (24h)</h3>
+                        <div class="stat-number">${latestReport.newUsers}</div>
+                    </div>
+                </div>
+
+                <div class="report-card">
+                    <div class="report-icon icon-tasks"><i class="fas fa-check-double"></i></div>
+                    <div class="report-content">
+                        <h3>Total Tasks</h3>
+                        <div class="stat-number">${latestReport.totalTasks}</div>
+                    </div>
+                </div>
+
+                <div class="report-card">
+                    <div class="report-icon icon-done"><i class="fas fa-trophy"></i></div>
+                    <div class="report-content">
+                        <h3>Completed</h3>
+                        <div class="stat-number">${latestReport.completedTasks}</div>
+                    </div>
+                </div>
             </div>
-            <div class="chart-container">
-                <canvas id="analytics-chart"></canvas>
+            
+            <div class="advanced-chart-wrapper">
+                <h3><i class="fas fa-chart-bar"></i> System Growth</h3>
+                <div class="chart-container">
+                    <canvas id="analytics-chart"></canvas>
+                </div>
             </div>
         `;
 
-        document.getElementById('analytics-total-users').textContent = latestReport.totalUsers;
-        document.getElementById('analytics-new-users').textContent = latestReport.newUsers;
-        document.getElementById('analytics-total-tasks').textContent = latestReport.totalTasks;
-        document.getElementById('analytics-completed-tasks').textContent = latestReport.completedTasks;
-
-        const chartLabels = reports.map(r => new Date(r.date.seconds * 1000).toLocaleDateString()).reverse();
+        // Prepare Chart Data
+        const chartLabels = reports.map(r => new Date(r.date.seconds * 1000).toLocaleDateString(undefined, {month:'short', day:'numeric'})).reverse();
         const totalTasksData = reports.map(r => r.totalTasks).reverse();
         const completedTasksData = reports.map(r => r.completedTasks).reverse();
         
         const ctx = document.getElementById('analytics-chart').getContext('2d');
 
-        // --- THIS IS THE FIX ---
-        // 1. Check if a chart instance already exists and destroy it.
-        if (analyticsChart) {
-            analyticsChart.destroy();
-        }
+        if (analyticsChart) { analyticsChart.destroy(); }
         
-        // 2. Create the new chart and assign it to our global variable.
         analyticsChart = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: chartLabels,
                 datasets: [
                     {
-                        label: 'Total Tasks Created',
+                        label: 'Total Tasks',
                         data: totalTasksData,
-                        backgroundColor: 'rgba(212, 163, 115, 0.6)',
-                        borderColor: 'rgba(212, 163, 115, 1)',
-                        borderWidth: 1
+                        backgroundColor: '#FF80BF', // Pink from brand
+                        borderRadius: 4,
+                        barPercentage: 0.6
                     },
                     {
-                        label: 'Tasks Completed',
+                        label: 'Completed',
                         data: completedTasksData,
-                        backgroundColor: 'rgba(42, 157, 143, 0.6)',
-                        borderColor: 'rgba(42, 157, 143, 1)',
-                        borderWidth: 1
+                        backgroundColor: '#9580FF', // Purple from brand
+                        borderRadius: 4,
+                        barPercentage: 0.6
                     }
                 ]
             },
             options: {
-                scales: { y: { beginAtZero: true } },
                 responsive: true,
-                maintainAspectRatio: false
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: '#f3f4f6' },
+                        ticks: { font: { family: 'Poppins' } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { family: 'Poppins' } }
+                    }
+                }
             }
         });
-        // --- END OF FIX ---
 
     } catch (error) {
         console.error("Error loading system analytics:", error);
@@ -1373,11 +1786,11 @@ const showAchievementModal = (badge) => {
     badgeModalName.textContent = badge.name;
     
     // Show the modal
-    badgeModal.classList.remove('hide');
+    toggleModal('badge-modal', 'open');
 };
 
 const hideAchievementModal = () => {
-    if (badgeModal) badgeModal.classList.add('hide');
+    toggleModal('badge-modal', 'close');
 };
 
 // --- Modal Functions --- //
@@ -1386,10 +1799,12 @@ const upgradeConfirmBtn = document.getElementById('upgrade-modal-confirm');
 const upgradeCancelBtn = document.getElementById('upgrade-modal-cancel');
 
 const openUpgradeModal = () => {
+    toggleModal('upgrade-modal', 'open');
     if (upgradeModal) upgradeModal.classList.remove('hide');
 };
 
 const closeUpgradeModal = () => {
+    toggleModal('upgrade-modal', 'close');
     if (upgradeModal) upgradeModal.classList.add('hide');
 };
 
@@ -1454,7 +1869,7 @@ const openTaskModal = (task = null) => {
         if(taskStatusSelect) taskStatusSelect.value = 'todo';
         datePicker.clear(); timePicker.clear();
     }
-    taskModal.classList.remove('hide');
+    toggleModal('task-modal', 'open');
 };
 
 const createConversationForTask = async (taskId) => {
@@ -1518,16 +1933,65 @@ const openDetailModal = async (taskId) => {
     
     activeListenerToken = taskId;
     detailTaskId = taskId;
+    
+    // 1. Set Title
     detailTaskTitle.textContent = task.text;
 
+    // 2. NEW: Render Metadata Tags (Pills)
+    const metaTagsContainer = document.getElementById('detail-meta-tags');
+    if (metaTagsContainer) {
+        metaTagsContainer.innerHTML = ''; // Clear previous
+
+        // Helper for Colors (Reused)
+        const getBadgeColorClass = (category) => {
+            if (!category) return 'badge-purple';
+            const lower = category.toLowerCase();
+            if (['profitable', 'urgent', 'work', 'high'].some(k => lower.includes(k))) return 'badge-pink';
+            if (['ai', 'tech', 'personal', 'health'].some(k => lower.includes(k))) return 'badge-green';
+            if (['1 person', 'team', 'shopping', 'study'].some(k => lower.includes(k))) return 'badge-blue';
+            const colors = ['badge-pink', 'badge-green', 'badge-blue', 'badge-purple'];
+            let hash = 0;
+            for (let i = 0; i < category.length; i++) hash = category.charCodeAt(i) + ((hash << 5) - hash);
+            return colors[Math.abs(hash) % colors.length];
+        };
+
+        // Category Pill
+        const categoryName = task.category || 'General';
+        metaTagsContainer.innerHTML += `<span class="badge ${getBadgeColorClass(categoryName)}">${categoryName}</span>`;
+
+        // Priority Pill
+        if (task.priority) {
+            let pColor = 'badge-gray';
+            if(task.priority === 'high') pColor = 'badge-pink';
+            if(task.priority === 'medium') pColor = 'badge-blue';
+            metaTagsContainer.innerHTML += `<span class="badge ${pColor}">${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority</span>`;
+        }
+
+        // Status Pill
+        let sColor = 'badge-gray';
+        let sText = 'To Do';
+        if(task.status === 'inprogress') { sColor = 'badge-blue'; sText = 'In Progress'; }
+        if(task.status === 'completed') { sColor = 'badge-green'; sText = 'Completed'; }
+        metaTagsContainer.innerHTML += `<span class="badge ${sColor}">${sText}</span>`;
+
+        // Deadline Pill
+        if (task.deadline) {
+            const dateStr = new Date(task.deadline.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            metaTagsContainer.innerHTML += `<span class="badge badge-orange"><i class="far fa-clock"></i> ${dateStr}</span>`;
+        }
+    }
+
+    // 3. Render Subtasks
     detailSubtaskList.innerHTML = '';
     if (task.subtasks) task.subtasks.forEach(sub => renderSubtaskInModal(sub, detailSubtaskList, true));
+    
+    // 4. Render Attachments
     renderAttachmentPreviews(detailAttachmentsList, task.attachments || [], true);
     
+    // 5. Setup Comments & Logs
     const commentSection = detailCommentsList?.closest('.detail-section');
     const updateLogSection = document.getElementById('detail-update-log-section');
     
-    // Update log is now always on
     if(commentSection) commentSection.style.display = 'block';
     if(updateLogSection) updateLogSection.style.display = 'block';
 
@@ -1552,7 +2016,8 @@ const openDetailModal = async (taskId) => {
 
     const commentFeedback = document.getElementById('comment-feedback');
     if (commentFeedback) commentFeedback.textContent = '';
-    taskDetailModal.classList.remove('hide');
+    
+    toggleModal('task-detail-modal', 'open');
 };
 
 
@@ -2178,6 +2643,28 @@ const setupNotifications = () => {
 
 
 // --- Utility Functions --- //
+// --- Reusable Modal Animation Helper ---
+const toggleModal = (modalId, action) => {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+
+    if (action === 'open') {
+        // Open immediately
+        modal.classList.remove('hide');
+        modal.classList.add('modal-animate-in');
+        modal.classList.remove('modal-animate-out');
+    } else {
+        // Animate out, THEN hide
+        modal.classList.remove('modal-animate-in');
+        modal.classList.add('modal-animate-out');
+        
+        // Wait 280ms (matches CSS animation) then apply display:none
+        setTimeout(() => {
+            modal.classList.add('hide');
+            modal.classList.remove('modal-animate-out');
+        }, 280); 
+    }
+};
 function formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -2498,7 +2985,7 @@ showComparisonBtn?.addEventListener('click', () => {
 // --- NEW: Event listener for admin user filters ---
 const adminUserFilters = document.getElementById('admin-user-filters');
 adminUserFilters?.addEventListener('click', (e) => {
-    if (e.target.matches('.filter-btn')) {
+    if (e.target.matches('.glass-filter-btn')) {
         // Update the active button style
         adminUserFilters.querySelector('.active').classList.remove('active');
         e.target.classList.add('active');
@@ -2512,8 +2999,17 @@ adminUserFilters?.addEventListener('click', (e) => {
 });
 
     badgeModalOkBtn?.addEventListener('click', hideAchievementModal);
-    showSignup?.addEventListener('click', (e) => { e.preventDefault(); showPage('signup-page'); });
-    showSignin?.addEventListener('click', (e) => { e.preventDefault(); showPage('signin-page'); });
+    // Flip to Sign Up
+    flipSignupBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        authCard3d.classList.add('flipped');
+    });
+
+    // Flip to Sign In
+    flipSigninBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        authCard3d.classList.remove('flipped');
+    });
     logoutBtn?.addEventListener('click', () => auth.signOut());
     profileMenu?.addEventListener('click', (e) => { e.stopPropagation(); profileDropdown.classList.toggle('show'); });
     window.addEventListener('click', () => { if (profileDropdown?.classList.contains('show')) profileDropdown.classList.remove('show'); });
@@ -2526,7 +3022,7 @@ adminUserFilters?.addEventListener('click', (e) => {
             .then(cred => db.collection('users').doc(cred.user.uid).set({
                 displayName: userEmail.split('@')[0],
                 email: userEmail.toLowerCase(),
-                photoURL: 'https://placehold.co/100x100/d4a373/fefae0?text=User',
+                photoURL: 'default-user.jpg',
                 preferences: userPreferences,
                 unlockedBadges: [],
                 role: 'user' 
@@ -2542,10 +3038,28 @@ adminUserFilters?.addEventListener('click', (e) => {
     profileForm?.addEventListener('submit', (e) => {
         e.preventDefault();
         if (!currentUser) return;
+
+        const btnText = document.querySelector('#save-profile-btn .flower-text'); 
+
+        // 1. Save Data to Firestore
         db.collection('users').doc(currentUser.uid).set({
             displayName: displayNameInput.value,
             preferences: userPreferences
-        }, { merge: true }).then(() => showFeedback(profileFeedback, "Profile saved!", "success"))
+        }, { merge: true }).then(() => {
+            
+            // 2. Simple Text Feedback
+            if (btnText) {
+                const originalText = btnText.innerText;
+                btnText.innerText = "Done!";
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    btnText.innerText = originalText;
+                }, 2000);
+            }
+            
+            showFeedback(profileFeedback, "Profile saved!", "success");
+        })
         .catch(error => showFeedback(profileFeedback, error.message, "error"));
     });
     profilePhotoInput?.addEventListener('change', (e) => {
@@ -2555,8 +3069,9 @@ adminUserFilters?.addEventListener('click', (e) => {
             .then(snapshot => snapshot.ref.getDownloadURL()
             .then(url => db.collection('users').doc(currentUser.uid).set({ photoURL: url }, { merge: true })));
     });
-     themeToggle?.addEventListener('change', (e) => {
-        userPreferences.theme = e.target.checked ? 'dark' : 'light';
+    themeToggle?.addEventListener('change', (e) => {
+        // Checked means Day/Light mode now
+        userPreferences.theme = e.target.checked ? 'light' : 'dark';
         applyUserPreferences(userPreferences);
         updateUserPreference('theme', userPreferences.theme);
     });
@@ -2572,18 +3087,38 @@ adminUserFilters?.addEventListener('click', (e) => {
             calendarMode = e.target.value;
         }
     });
+    // --- FIX 1: Dashboard View Switcher Logic ---
+    const layoutSwitcherDashboard = document.getElementById('layout-switcher-dashboard');
+    layoutSwitcherDashboard?.addEventListener('change', (e) => {
+        // Check if one of the radio buttons was clicked
+        if (e.target.matches('input[name="layout"]')) {
+            userPreferences.layout = e.target.value;
+            
+            // 1. Update the app state
+            applyUserPreferences(userPreferences);
+            
+            // 2. Re-render the correct view
+            renderCurrentView();
+            
+            // 3. Save to database
+            updateUserPreference('layout', userPreferences.layout);
+
+            // 4. Sync the Settings menu switcher so it matches
+            const settingsInput = document.querySelector(`#layout-switcher input[value="${e.target.value}"]`);
+            if (settingsInput) settingsInput.checked = true;
+        }
+    });
 
     addTaskBtn?.addEventListener('click', () => openTaskModal());
-    cancelTaskBtn?.addEventListener('click', () => taskModal.classList.add('hide'));
+    sidebarAddTaskBtn?.addEventListener('click', () => openTaskModal());
+    cancelTaskBtn?.addEventListener('click', () => toggleModal('task-modal', 'close'));
     detailCloseBtn?.addEventListener('click', () => {
-        taskDetailModal.classList.add('hide');
+        toggleModal('task-detail-modal', 'close');
         cleanupCommentListener();
         detailTaskId = null;
     });
 
     saveTaskBtn?.addEventListener('click', async () => {const signinPage = document.getElementById('signin-page'), signupPage = document.getElementById('signup-page');
-    const todoPage = document.getElementById('todo-page'), profilePage = document.getElementById('profile-page');
-    const signinLink = document.getElementById('signin-link'), signupLink = document.getElementById('signup-link');
     if (!taskInput.value.trim()) return;
 
     const syncCheckbox = document.getElementById('google-calendar-sync-checkbox');
@@ -2721,7 +3256,7 @@ adminUserFilters?.addEventListener('click', (e) => {
         }
         // --- GOOGLE CALENDAR LOGIC ENDS HERE --- //
 
-        taskModal.classList.add('hide');
+        toggleModal('task-modal', 'close');
 
     } catch (error) {
         console.error("Error saving task:", error);
@@ -2862,10 +3397,15 @@ adminUserFilters?.addEventListener('click', (e) => {
     });
 
     searchInput?.addEventListener('input', () => { currentSearchTerm = searchInput.value.toLowerCase().trim(); renderCurrentView(); });
-    statusFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { statusFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentStatusFilter = e.target.dataset.filter; renderCurrentView(); } });
-    categoryFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { if(categoryFilters.querySelector('.active')) categoryFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentCategoryFilter = e.target.dataset.filter; renderCurrentView(); } });
-    priorityFilters?.addEventListener('click', (e) => { if (e.target.matches('.filter-btn')) { priorityFilters.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); currentPriorityFilter = e.target.dataset.priority; renderCurrentView(); } });
-
+    statusFilters?.addEventListener('click', (e) => { 
+        // FIX: Updated class name to match new HTML
+        if (e.target.matches('.filter-text-btn')) { 
+            statusFilters.querySelector('.active').classList.remove('active'); 
+            e.target.classList.add('active'); 
+            currentStatusFilter = e.target.dataset.filter; 
+            renderCurrentView(); 
+        } 
+    });
     if(enableNotificationsBtn) enableNotificationsBtn.addEventListener('click', setupNotifications);
 
     taskAttachmentsInput?.addEventListener('change', handleFileUpload);
@@ -2920,14 +3460,6 @@ adminUserFilters?.addEventListener('click', (e) => {
             if (typeof tearDownTeamMode === 'function') tearDownTeamMode();
             else console.error("teammode.js functions not loaded.");
             listenForTasks();
-        }
-    });
-
-    const paletteSwitcher = document.getElementById('palette-switcher');
-    paletteSwitcher?.addEventListener('change', e => {
-        if (e.target.matches('input[name="palette"]')) {
-            userPreferences.palette = e.target.value;
-            applyUserPreferences(userPreferences);
         }
     });
 
@@ -3022,18 +3554,74 @@ adminUserFilters?.addEventListener('click', (e) => {
     const exportModal = document.getElementById('export-modal');
     const cancelExportBtn = document.getElementById('cancel-export-btn');
     const exportCsvBtn = document.getElementById('export-csv-btn');
+    
+    // NEW: Focus Mode Toggle Logic (Updated)
+    const focusModeLink = document.getElementById('focus-mode-link');
+    const focusModePage = document.getElementById('focus-mode-page');
+    
+    focusModeLink?.addEventListener('click', (e) => {
+        e.preventDefault();
+        
+        const isNowActive = document.body.classList.toggle('focus-mode-active');
+        focusModeLink.classList.toggle('active', isNowActive);
+        
+        if (isNowActive) {
+            // 1. Hide all standard pages
+            ['todo-page', 'profile-page', 'analytics-page', 'admin-page'].forEach(id => {
+                document.getElementById(id)?.classList.add('hide');
+            });
+
+            // 2. Show the Focus Mode Page
+            focusModePage?.classList.remove('hide');
+            
+            // --- NEW: Auto-Apply the Active Background ---
+            const activeThemeOption = document.querySelector('.theme-option.active');
+            if (activeThemeOption) {
+                const bgId = activeThemeOption.dataset.bg;
+                
+                // Clear old classes first just in case
+                document.body.classList.remove('bg-theme-active');
+                document.body.classList.forEach(cls => {
+                    if (cls.startsWith('bg-')) document.body.classList.remove(cls);
+                });
+
+                // Apply new class
+                if (bgId && bgId !== 'none') {
+                    document.body.classList.add('bg-theme-active');
+                    document.body.classList.add(`bg-${bgId}`);
+                }
+            }
+            // ---------------------------------------------
+            
+            showFeedback(profileFeedback, "Focus Mode Enabled", "success");
+        } else {
+            // 1. Hide Focus Mode Page
+            focusModePage?.classList.add('hide');
+
+            // 2. Return to Dashboard (Todo Page)
+            showPage('todo-page');
+            
+            // 3. Optional: Remove background classes when exiting so they don't linger
+            document.body.classList.remove('bg-theme-active');
+            document.body.classList.forEach(cls => {
+                if (cls.startsWith('bg-')) document.body.classList.remove(cls);
+            });
+            
+            showFeedback(profileFeedback, "Focus Mode Disabled", "success");
+        }
+    });
 
     exportBtn?.addEventListener('click', () => {
         // Check if the user is premium
         if (isPremiumUser()) {
             // If premium, show the export options modal
-            if (exportModal) exportModal.classList.remove('hide');
+            toggleModal('export-modal', 'open');
         } else {
             // If not premium, show the upgrade modal
             openUpgradeModal();
         }
     });
-    cancelExportBtn?.addEventListener('click', () => exportModal.classList.add('hide'));
+    cancelExportBtn?.addEventListener('click', () => toggleModal('export-modal', 'close'));
 
     const escapeCsvCell = (cell) => {
         if (cell === null || cell === undefined) {
@@ -3157,5 +3745,901 @@ adminUserFilters?.addEventListener('click', (e) => {
     exportPdfBtn?.addEventListener('click', exportTasksToPdf);
     exportExcelBtn?.addEventListener('click', exportTasksToExcel);
     exportCsvBtn?.addEventListener('click', exportTasksToCsv);
+    // --- FIX 2: Export Button Logic (Correct Placement) ---
+    const triggerExportBtn = document.getElementById('trigger-export-btn');
+    triggerExportBtn?.addEventListener('click', () => {
+        // Check premium status before opening
+        if (isPremiumUser()) {
+            const exportModal = document.getElementById('export-modal');
+            if (exportModal) exportModal.classList.remove('hide');
+        } else {
+            // If not premium, show the upgrade modal
+            openUpgradeModal();
+        }
+    });
     handleSlackLinking();
+
+    // --- GALACTIC MODE LOGIC ---
+    const galacticBtn = document.getElementById('animated-bg-btn');
+    const globalPoints = document.getElementById('global-points-wrapper');
+
+    if (galacticBtn && globalPoints) {
+        // Check local storage for saved state
+        const isGalactic = localStorage.getItem('galacticMode') === 'true';
+        if (isGalactic) {
+            enableGalacticMode();
+        }
+
+        galacticBtn.addEventListener('click', () => {
+            const isActive = document.body.classList.contains('galactic-mode');
+            if (isActive) {
+                disableGalacticMode();
+            } else {
+                enableGalacticMode();
+            }
+        });
+
+        function enableGalacticMode() {
+            document.body.classList.add('galactic-mode');
+            document.body.classList.add('dark-theme'); // Force Dark Theme CSS
+            globalPoints.classList.remove('hide');
+            localStorage.setItem('galacticMode', 'true');
+
+            // SYNC TOGGLE: Uncheck it to show the "Moon/Night" icon
+            if (themeToggle) themeToggle.checked = false;
+            
+            // Update internal state so app knows we are in dark mode
+            userPreferences.theme = 'dark';
+        }
+
+        function disableGalacticMode() {
+            document.body.classList.remove('galactic-mode');
+            
+            // Force Light Mode on disable as requested
+            document.body.classList.remove('dark-theme'); 
+            
+            globalPoints.classList.add('hide');
+            localStorage.setItem('galacticMode', 'false');
+
+            // SYNC TOGGLE: Check it to show the "Sun/Day" icon
+            if (themeToggle) themeToggle.checked = true;
+
+            // Update internal state so app knows we are back to light mode
+            userPreferences.theme = 'light';
+        }
+    }
 });
+
+// --- DASHBOARD HEADER LOGIC ---
+
+// 1. Update Date & Time (Runs every second)
+const updateDashboardClock = () => {
+    const now = new Date();
+    const dateEl = document.getElementById('header-date');
+    const timeEl = document.getElementById('header-time');
+    
+    if (dateEl && timeEl) {
+        // Format: "Mon, Nov 30"
+        dateEl.textContent = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        // Format: "10:45 AM"
+        timeEl.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    }
+};
+
+// --- STEP 7: ADVANCED FILTERS LOGIC (MOVED & FIXED) ---
+
+// 1. Toggle the Filters Panel
+const advancedFilterToggle = document.getElementById('advanced-filter-toggle');
+const advancedFiltersPanel = document.getElementById('advanced-filters-panel');
+
+if (advancedFilterToggle && advancedFiltersPanel) {
+    // Remove any existing listeners to be safe (cloning trick)
+    const newToggle = advancedFilterToggle.cloneNode(true);
+    advancedFilterToggle.parentNode.replaceChild(newToggle, advancedFilterToggle);
+    
+    newToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        advancedFiltersPanel.classList.toggle('hide');
+        newToggle.classList.toggle('active');
+        
+        // Update the count bubble
+        const activeCount = [currentPriorityFilter, currentCategoryFilter].filter(f => f !== 'all').length;
+        const countBadge = document.getElementById('active-filter-count');
+        if(countBadge) {
+            countBadge.textContent = activeCount;
+            countBadge.classList.toggle('hide', activeCount === 0);
+        }
+    });
+}
+
+// 2. Generic Visual Handler
+const handlePillClick = (e, container) => {
+    if (e.target.matches('.pill-btn')) {
+        container.querySelectorAll('.pill-btn').forEach(btn => btn.classList.remove('active'));
+        e.target.classList.add('active');
+        return true;
+    }
+    return false;
+};
+
+// 3. Category Filter Listener
+if (categoryFilters) {
+    categoryFilters.addEventListener('click', (e) => { 
+        if (handlePillClick(e, categoryFilters)) {
+            currentCategoryFilter = e.target.dataset.filter; 
+            renderCurrentView(); 
+        } 
+    });
+}
+
+// 4. Priority Filter Listener
+if (priorityFilters) {
+    priorityFilters.addEventListener('click', (e) => { 
+        if (handlePillClick(e, priorityFilters)) {
+            currentPriorityFilter = e.target.dataset.priority; 
+            renderCurrentView(); 
+        } 
+    });
+}
+
+// 2. Update Greeting & Photo
+const updateDashboardProfile = () => {
+    if (!currentUserProfile) return;
+    
+    const greetingEl = document.getElementById('header-greeting');
+    const imgEl = document.getElementById('header-profile-img');
+    
+    if (greetingEl) {
+        // Set name or default to 'Friend'
+        const name = currentUserProfile.displayName || currentUser.email?.split('@')[0] || 'Friend';
+        greetingEl.textContent = `Hello, ${name}`;
+    }
+    
+    if (imgEl && currentUserProfile.photoURL) {
+        imgEl.src = currentUserProfile.photoURL;
+    }
+};
+
+// --- VOICE SEARCH FUNCTIONALITY ---
+    const voiceSearchBtn = document.getElementById('voice-search-btn');
+    const searchInputField = document.getElementById('search-input');
+
+    if (voiceSearchBtn && searchInputField) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'en-US';
+
+            voiceSearchBtn.addEventListener('click', () => {
+                if (voiceSearchBtn.classList.contains('listening')) {
+                    recognition.stop();
+                } else {
+                    recognition.start();
+                }
+            });
+
+            recognition.onstart = () => {
+                voiceSearchBtn.classList.add('listening');
+                searchInputField.placeholder = "Listening...";
+            };
+
+            recognition.onend = () => {
+                voiceSearchBtn.classList.remove('listening');
+                searchInputField.placeholder = "Search your tasks...";
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                searchInputField.value = transcript;
+                // Trigger search logic immediately
+                currentSearchTerm = transcript.toLowerCase().trim();
+                renderCurrentView();
+            };
+
+        } else {
+            console.warn("Speech API not supported");
+            voiceSearchBtn.style.display = 'none';
+        }
+    }
+
+// Start the clock immediately
+setInterval(updateDashboardClock, 1000);
+updateDashboardClock(); // Initial call
+
+    // =========================================
+    // FOCUS MODE: NAVIGATION, EFFECTS, AUDIO & FIREBASE STATS
+    // =========================================
+    
+    // --- Elements ---
+    const focusNavButtons = document.querySelectorAll('.focus-icon-btn');
+    
+    // Modals
+    const focusThemeModal = document.getElementById('focus-theme-modal');
+    const closeThemeModalBtn = document.getElementById('close-theme-modal');
+    const animationModal = document.getElementById('focus-animation-modal');
+    const closeAnimationBtn = document.getElementById('close-animation-modal');
+    const focusMusicModal = document.getElementById('focus-music-modal');
+    const closeMusicBtn = document.getElementById('close-music-modal');
+    const focusStatsModal = document.getElementById('focus-stats-modal');
+    const closeStatsBtn = document.getElementById('close-stats-modal');
+
+    // Theme & Anim Controls
+    const themeOptions = document.querySelectorAll('.theme-option');
+    const targetBgElement = document.body;
+    const toggleGalactic = document.getElementById('toggle-galactic');
+    const toggleSnow = document.getElementById('toggle-snow');
+    const toggleRain = document.getElementById('toggle-rain');
+
+    // --- FIREBASE STATS SYSTEM (Buffered) ---
+    
+    let focusBuffer = 0; // Accumulates seconds before sending to Cloud
+    let hasPendingBuffer = false;
+
+    // 1. Buffered Save Function (Called every second by timers)
+    const saveFocusTime = (seconds) => {
+        focusBuffer += seconds;
+        hasPendingBuffer = true;
+
+        // Auto-flush to Firebase every 10 seconds (or if buffer gets large)
+        if (focusBuffer >= 10) {
+            flushFocusStats();
+        }
+    };
+
+    // 2. Flush Function (Sends buffer to Firestore)
+    const flushFocusStats = async () => {
+        if (!currentUser || focusBuffer === 0) return;
+
+        const secondsToSend = focusBuffer;
+        focusBuffer = 0; // Reset immediately to prevent double send
+        hasPendingBuffer = false;
+
+        const now = new Date();
+        const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        const hourKey = 'h' + now.getHours(); // e.g., 'h14'
+
+        try {
+            const statsRef = db.collection('users').doc(currentUser.uid).collection('focus_stats').doc(dateKey);
+            
+            // Atomic increment using Firebase FieldValue
+            await statsRef.set({
+                [hourKey]: firebase.firestore.FieldValue.increment(secondsToSend),
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            console.log(`[FocusStats] Saved ${secondsToSend}s to Cloud.`);
+        } catch (error) {
+            console.error("Error saving focus stats:", error);
+            // Restore buffer if failed (optional, but good for accuracy)
+            focusBuffer += secondsToSend; 
+        }
+    };
+
+    // Ensure data is saved when closing the tab
+    window.addEventListener('beforeunload', () => {
+        if (hasPendingBuffer) flushFocusStats();
+    });
+
+    // 3. Render Chart (Reads from Firestore)
+    let focusChartInstance = null;
+
+    const renderFocusStats = async () => {
+        if (!currentUser) return;
+
+        // flush any pending time first so the chart is up to date
+        if (focusBuffer > 0) await flushFocusStats();
+
+        // Show loading state (optional visual cue)
+        document.getElementById('today-total-time').textContent = '...';
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        try {
+            // Fetch Today and Yesterday
+            const colRef = db.collection('users').doc(currentUser.uid).collection('focus_stats');
+            
+            // We fetch separately to be safe with indexes
+            const todayDoc = await colRef.doc(todayStr).get();
+            const yesterdayDoc = await colRef.doc(yesterdayStr).get();
+
+            const parseDocData = (doc) => {
+                const data = doc.exists ? doc.data() : {};
+                const hours = Array(24).fill(0);
+                for (let i = 0; i < 24; i++) {
+                    hours[i] = data['h' + i] || 0;
+                }
+                return hours;
+            };
+
+            const todayData = parseDocData(todayDoc);
+            const yesterdayData = parseDocData(yesterdayDoc);
+
+            // Calculate Totals
+            const totalSecondsToday = todayData.reduce((a, b) => a + b, 0);
+            const totalSecondsYesterday = yesterdayData.reduce((a, b) => a + b, 0);
+
+            // Format Text
+            const formatTime = (sec) => {
+                const h = Math.floor(sec / 3600);
+                const m = Math.floor((sec % 3600) / 60);
+                return `${h}h ${m}m`;
+            };
+
+            document.getElementById('today-total-time').textContent = formatTime(totalSecondsToday);
+            document.getElementById('yesterday-total-time').textContent = formatTime(totalSecondsYesterday);
+
+            // Streak (Simple logic)
+            let streak = totalSecondsToday > 0 ? 1 : 0;
+            if (totalSecondsYesterday > 0 && totalSecondsToday > 0) streak = 2; 
+            document.getElementById('focus-streak').textContent = `${streak} Day${streak !== 1 ? 's' : ''}`;
+
+            // Ring Progress
+            const goalSeconds = 4 * 3600; 
+            const percent = Math.min((totalSecondsToday / goalSeconds) * 100, 100);
+            const circle = document.getElementById('focus-circle-progress');
+            const radius = circle.r.baseVal.value;
+            const circumference = radius * 2 * Math.PI;
+            circle.style.strokeDasharray = `${circumference} ${circumference}`;
+            const offset = circumference - (percent / 100) * circumference;
+            circle.style.strokeDashoffset = offset;
+
+            // Render Chart
+            const ctx = document.getElementById('focus-trend-chart').getContext('2d');
+            
+            const getAccumulated = (data) => {
+                let acc = 0;
+                return data.map(sec => {
+                    acc += sec;
+                    return (acc / 60).toFixed(1); 
+                });
+            };
+
+            const todayTrend = getAccumulated(todayData);
+            const yesterdayTrend = getAccumulated(yesterdayData);
+            
+            if (focusChartInstance) focusChartInstance.destroy();
+
+            focusChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => i + ':00'),
+                    datasets: [
+                        {
+                            label: 'Today',
+                            data: todayTrend,
+                            borderColor: '#4D7CFE',
+                            backgroundColor: 'rgba(77, 124, 254, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Yesterday',
+                            data: yesterdayTrend,
+                            borderColor: 'rgba(255, 255, 255, 0.3)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.4,
+                            fill: false,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, labels: { color: 'white', font: {size: 10} } } },
+                    scales: {
+                        x: { display: false }, 
+                        y: { 
+                            display: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: 'rgba(255,255,255,0.5)', font: {size: 10} } 
+                        }
+                    },
+                    interaction: { intersect: false, mode: 'index' }
+                }
+            });
+
+            // 4. CLEANUP OLD DATA (Run this silently in background)
+            cleanupOldStats(yesterdayStr);
+
+        } catch (error) {
+            console.error("Error rendering stats:", error);
+            document.getElementById('today-total-time').textContent = "Error";
+        }
+    };
+
+    // 4. Cleanup Function (Deletes data older than yesterday)
+    const cleanupOldStats = async (yesterdayStr) => {
+        // Query for docs where ID < yesterdayStr
+        // Note: String comparison works for ISO dates (e.g. '2023-10-01' < '2023-10-02')
+        try {
+            const colRef = db.collection('users').doc(currentUser.uid).collection('focus_stats');
+            const snapshot = await colRef.where(firebase.firestore.FieldPath.documentId(), '<', yesterdayStr).get();
+            
+            if (!snapshot.empty) {
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+                console.log(`[FocusStats] Cleaned up ${snapshot.size} old records.`);
+            }
+        } catch (e) {
+            console.warn("Cleanup check failed (might be permissions or empty):", e);
+        }
+    };
+
+    // --- AUDIO SYSTEM START ---
+    const soundSettings = {
+        stopwatchHourly: false,
+        pomoFocus: true,
+        pomoBreak: true
+    };
+
+    const audioLibrary = {
+        // Alerts
+        alert: new Audio('https://assets.mixkit.co/active_storage/sfx/1257/1257-preview.mp3'),
+        chime: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'),
+        
+        // Ambient Sounds (Loops)
+        rain: new Audio('https://assets.mixkit.co/active_storage/sfx/2515/2515-preview.mp3'),
+        wind: new Audio('https://assets.mixkit.co/active_storage/sfx/1233/1233-preview.mp3'),
+        forest: new Audio('https://assets.mixkit.co/active_storage/sfx/2434/2434-preview.mp3'),
+        lofi: new Audio('https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3')
+    };
+
+    // Enable Looping for Ambient Sounds
+    ['rain', 'wind', 'forest', 'lofi'].forEach(key => {
+        if(audioLibrary[key]) {
+            audioLibrary[key].loop = true;
+            audioLibrary[key].volume = 0.5; 
+        }
+    });
+
+    let currentAmbient = null;
+
+    const toggleAmbientSound = (soundKey) => {
+        if (currentAmbient && currentAmbient !== soundKey) {
+            const oldAudio = audioLibrary[currentAmbient];
+            if(oldAudio) {
+                oldAudio.pause();
+                oldAudio.currentTime = 0;
+            }
+            document.querySelector(`.ambient-card[data-sound="${currentAmbient}"]`)?.classList.remove('playing');
+            currentAmbient = null;
+        }
+
+        const newAudio = audioLibrary[soundKey];
+        if (!newAudio) return;
+
+        if (currentAmbient === soundKey) {
+            newAudio.pause();
+            newAudio.currentTime = 0;
+            document.querySelector(`.ambient-card[data-sound="${soundKey}"]`)?.classList.remove('playing');
+            currentAmbient = null;
+        } else {
+            newAudio.play()
+                .then(() => {
+                    document.querySelector(`.ambient-card[data-sound="${soundKey}"]`)?.classList.add('playing');
+                    currentAmbient = soundKey;
+                })
+                .catch(e => console.error("Audio play failed:", e));
+        }
+    };
+
+    const playAlert = (type) => {
+        if (type === 'chime' && soundSettings.stopwatchHourly) audioLibrary.chime.play();
+        if (type === 'focus' && soundSettings.pomoFocus) audioLibrary.alert.play();
+        if (type === 'break' && soundSettings.pomoBreak) audioLibrary.alert.play();
+    };
+
+    // --- NAVIGATION HANDLER ---
+    focusNavButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            focusNavButtons.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            const targetView = this.dataset.target;
+
+            if (targetView === 'focus-theme') toggleModal('focus-theme-modal', 'open');
+            else if (targetView === 'focus-animation') {
+                toggleModal('focus-animation-modal', 'open');
+                if(toggleGalactic) toggleGalactic.checked = document.body.classList.contains('galactic-mode');
+                if(toggleSnow) toggleSnow.checked = !!document.getElementById('snow-container');
+                if(toggleRain) toggleRain.checked = !!document.getElementById('rain-container');
+            }
+            else if (targetView === 'focus-stopwatch') toggleModal('focus-stopwatch-modal', 'open');
+            else if (targetView === 'focus-pomodoro') toggleModal('focus-pomodoro-modal', 'open');
+            else if (targetView === 'focus-music') toggleModal('focus-music-modal', 'open');
+            else if (targetView === 'focus-stats') {
+                toggleModal('focus-stats-modal', 'open');
+                renderFocusStats(); 
+            }
+        });
+    });
+
+    // --- CLOSE HANDLERS ---
+    closeThemeModalBtn?.addEventListener('click', () => toggleModal('focus-theme-modal', 'close'));
+    closeAnimationBtn?.addEventListener('click', () => toggleModal('focus-animation-modal', 'close'));
+    closeMusicBtn?.addEventListener('click', () => toggleModal('focus-music-modal', 'close'));
+    closeStatsBtn?.addEventListener('click', () => toggleModal('focus-stats-modal', 'close'));
+
+    // --- MUSIC MODAL LOGIC ---
+    const toggleSwSound = document.getElementById('sound-toggle-stopwatch');
+    const togglePomoFocusSound = document.getElementById('sound-toggle-pomo-focus');
+    const togglePomoBreakSound = document.getElementById('sound-toggle-pomo-break');
+    const ambientCards = document.querySelectorAll('.ambient-card');
+
+    if(toggleSwSound) {
+        toggleSwSound.addEventListener('change', (e) => soundSettings.stopwatchHourly = e.target.checked);
+        togglePomoFocusSound.addEventListener('change', (e) => soundSettings.pomoFocus = e.target.checked);
+        togglePomoBreakSound.addEventListener('change', (e) => soundSettings.pomoBreak = e.target.checked);
+    }
+
+    ambientCards.forEach(card => {
+        card.addEventListener('click', () => toggleAmbientSound(card.dataset.sound));
+    });
+
+    // --- THEME SELECTION ---
+    themeOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            themeOptions.forEach(opt => opt.classList.remove('active'));
+            option.classList.add('active');
+            const bgId = option.dataset.bg; 
+            targetBgElement.classList.remove('bg-theme-active');
+            targetBgElement.classList.forEach(cls => {
+                if (cls.startsWith('bg-')) targetBgElement.classList.remove(cls);
+            });
+            if (bgId !== 'none') {
+                targetBgElement.classList.add('bg-theme-active');
+                targetBgElement.classList.add(`bg-${bgId}`);
+            }
+        });
+    });
+
+    // --- ANIMATION TOGGLES ---
+    toggleGalactic?.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        const globalPoints = document.getElementById('global-points-wrapper');
+        document.body.classList.toggle('galactic-mode', isChecked);
+        document.body.classList.toggle('dark-theme', isChecked);
+        if (globalPoints) globalPoints.classList.toggle('hide', !isChecked);
+        localStorage.setItem('galacticMode', isChecked);
+        if(themeToggle) themeToggle.checked = !isChecked; 
+        userPreferences.theme = isChecked ? 'dark' : 'light';
+    });
+
+    const enableSnow = () => {
+        if(document.getElementById('snow-container')) return;
+        const container = document.createElement('div');
+        container.id = 'snow-container'; container.className = 'snow-container';
+        document.body.appendChild(container);
+        for(let i=0; i<50; i++) {
+            const flake = document.createElement('div'); flake.className = 'snowflake';
+            const size = Math.random() * 5 + 2 + 'px';
+            flake.style.width = size; flake.style.height = size;
+            flake.style.left = Math.random() * 100 + 'vw';
+            flake.style.animationDuration = Math.random() * 3 + 2 + 's';
+            flake.style.opacity = Math.random(); flake.style.animationDelay = Math.random() * 5 + 's';
+            container.appendChild(flake);
+        }
+    };
+    const disableSnow = () => document.getElementById('snow-container')?.remove();
+
+    const enableRain = () => {
+        if(document.getElementById('rain-container')) return;
+        const container = document.createElement('div');
+        container.id = 'rain-container'; container.className = 'rain-container';
+        document.body.appendChild(container);
+        for(let i=0; i<80; i++) {
+            const drop = document.createElement('div'); drop.className = 'raindrop';
+            drop.style.left = Math.random() * 100 + 'vw';
+            drop.style.animationDuration = Math.random() * 0.5 + 0.5 + 's';
+            drop.style.animationDelay = Math.random() * 2 + 's';
+            container.appendChild(drop);
+        }
+    };
+    const disableRain = () => document.getElementById('rain-container')?.remove();
+
+    toggleSnow?.addEventListener('change', (e) => {
+        if (e.target.checked) { enableSnow(); if(toggleRain) { toggleRain.checked = false; disableRain(); } } else { disableSnow(); }
+    });
+    toggleRain?.addEventListener('change', (e) => {
+        if (e.target.checked) { enableRain(); if(toggleSnow) { toggleSnow.checked = false; disableSnow(); } } else { disableRain(); }
+    });
+
+    // =========================================
+    // STOPWATCH LOGIC (With Buffered Tracking)
+    // =========================================
+    
+    let swInterval = null;
+    let swSeconds = 0;
+    let isSwRunning = false;
+
+    const swDisplay = document.getElementById('stopwatch-display');
+    const swStartBtn = document.getElementById('sw-start-btn');
+    const swResetBtn = document.getElementById('sw-reset-btn');
+    const swCloseBtn = document.getElementById('close-stopwatch-modal');
+
+    const formatSwTime = (totalSeconds) => {
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    if (swStartBtn && swResetBtn) {
+        swStartBtn.addEventListener('click', () => {
+            if (isSwRunning) {
+                // PAUSE
+                clearInterval(swInterval);
+                isSwRunning = false;
+                swStartBtn.innerHTML = '<i class="fas fa-play"></i>';
+                flushFocusStats(); // Force save on pause
+            } else {
+                // START
+                isSwRunning = true;
+                swStartBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                swInterval = setInterval(() => {
+                    swSeconds++;
+                    swDisplay.textContent = formatSwTime(swSeconds);
+                    
+                    // --- TRACKING ---
+                    saveFocusTime(1); 
+                    // ----------------
+
+                    if (swSeconds > 0 && swSeconds % 3600 === 0) {
+                        playAlert('chime');
+                    }
+                }, 1000);
+            }
+        });
+
+        swResetBtn.addEventListener('click', () => {
+            clearInterval(swInterval);
+            isSwRunning = false;
+            swSeconds = 0;
+            swDisplay.textContent = "00:00:00";
+            swStartBtn.innerHTML = '<i class="fas fa-play"></i>';
+            flushFocusStats(); // Force save on reset
+        });
+    }
+
+    if (swCloseBtn) swCloseBtn.addEventListener('click', () => toggleModal('focus-stopwatch-modal', 'close'));
+
+    // =========================================
+    // POMODORO LOGIC (With Buffered Tracking)
+    // =========================================
+    
+    let pomoInterval = null;
+    let pomoTimeLeft = 25 * 60; 
+    let isPomoRunning = false;
+    let currentPomoMode = 'focus';
+
+    const pomoDisplay = document.getElementById('pomodoro-display');
+    const pomoStartBtn = document.getElementById('pomo-start-btn');
+    const pomoResetBtn = document.getElementById('pomo-reset-btn');
+    const pomoCloseBtn = document.getElementById('close-pomodoro-modal');
+    const pomoModeBtns = document.querySelectorAll('.pomo-mode-btn');
+    const pomoSettingsArea = document.getElementById('pomo-settings-area'); 
+    
+    const inputFocus = document.getElementById('pomo-input-focus');
+    const inputShort = document.getElementById('pomo-input-short');
+    const toggleAutoBreak = document.getElementById('auto-start-break-toggle');
+    const toggleAutoFocus = document.getElementById('auto-start-focus-toggle');
+
+    const updatePomoDisplay = () => {
+        const m = Math.floor(pomoTimeLeft / 60);
+        const s = pomoTimeLeft % 60;
+        pomoDisplay.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const getDurationForMode = (mode) => {
+        if(mode === 'focus') return parseInt(inputFocus.value) * 60;
+        if(mode === 'short') return parseInt(inputShort.value) * 60;
+        return 25 * 60;
+    };
+
+    const switchMode = (mode) => {
+        currentPomoMode = mode;
+        pomoModeBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+        pomoTimeLeft = getDurationForMode(mode);
+        updatePomoDisplay();
+    };
+
+    const toggleSettingsVisibility = (show) => {
+        const elementsToToggle = document.querySelectorAll('.pomo-hide-on-run');
+        elementsToToggle.forEach(el => {
+            if (show) el.classList.remove('hidden'); else el.classList.add('hidden');
+        });
+    };
+
+    if (pomoStartBtn) {
+        [inputFocus, inputShort].forEach(input => {
+            input.addEventListener('change', () => { if (!isPomoRunning) switchMode(currentPomoMode); });
+        });
+
+        pomoStartBtn.addEventListener('click', () => {
+            if (isPomoRunning) {
+                // PAUSE
+                clearInterval(pomoInterval);
+                isPomoRunning = false;
+                pomoStartBtn.innerHTML = '<i class="fas fa-play"></i>';
+                toggleSettingsVisibility(true);
+                flushFocusStats(); // Force save on pause
+            } else {
+                // START
+                isPomoRunning = true;
+                pomoStartBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                toggleSettingsVisibility(false); 
+                
+                pomoInterval = setInterval(() => {
+                    if (pomoTimeLeft > 0) {
+                        pomoTimeLeft--;
+                        updatePomoDisplay();
+                        
+                        // --- TRACKING START (Only count FOCUS mode) ---
+                        if (currentPomoMode === 'focus') {
+                            saveFocusTime(1);
+                        }
+                        // ----------------------------------------------
+
+                    } else {
+                        // TIMER ENDED
+                        clearInterval(pomoInterval);
+                        isPomoRunning = false;
+                        flushFocusStats(); // Save any remaining time
+                        
+                        if (currentPomoMode === 'focus') playAlert('focus');
+                        else playAlert('break');
+                        
+                        if (currentPomoMode === 'focus') {
+                            if (toggleAutoBreak.checked) { 
+                                switchMode('short'); 
+                                setTimeout(() => pomoStartBtn.click(), 500); 
+                            } else { 
+                                switchMode('short'); 
+                                pomoStartBtn.innerHTML = '<i class="fas fa-play"></i>';
+                                toggleSettingsVisibility(true); 
+                            }
+                        } else {
+                            if (toggleAutoFocus.checked) { 
+                                switchMode('focus'); 
+                                setTimeout(() => pomoStartBtn.click(), 500); 
+                            } else { 
+                                switchMode('focus'); 
+                                pomoStartBtn.innerHTML = '<i class="fas fa-play"></i>';
+                                toggleSettingsVisibility(true);
+                            }
+                        }
+                    }
+                }, 1000);
+            }
+        });
+
+        pomoResetBtn.addEventListener('click', () => {
+            clearInterval(pomoInterval);
+            isPomoRunning = false;
+            switchMode(currentPomoMode);
+            pomoStartBtn.innerHTML = '<i class="fas fa-play"></i>';
+            toggleSettingsVisibility(true); 
+            flushFocusStats(); // Force save on reset
+        });
+
+        pomoModeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                clearInterval(pomoInterval);
+                isPomoRunning = false;
+                pomoStartBtn.innerHTML = '<i class="fas fa-play"></i>';
+                switchMode(btn.dataset.mode);
+                toggleSettingsVisibility(true);
+                flushFocusStats(); // Force save on mode switch
+            });
+        });
+        
+        document.querySelectorAll('.time-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const inputId = btn.dataset.target;
+                const input = document.getElementById(inputId);
+                const isPlus = btn.classList.contains('plus');
+                let val = parseInt(input.value);
+                if(isPlus) val++; else val--;
+                
+                const min = parseInt(input.min);
+                const max = parseInt(input.max);
+                if(val < min) val = min;
+                if(val > max) val = max;
+                
+                input.value = val;
+                input.dispatchEvent(new Event('change'));
+            });
+        });
+    }
+
+    // =========================================
+    // FOCUS MODE EXIT INTERCEPTOR
+    // =========================================
+    
+    const exitModal = document.getElementById('focus-exit-modal');
+    const confirmExitBtn = document.getElementById('confirm-exit-btn');
+    const cancelExitBtn = document.getElementById('cancel-exit-btn');
+    let pendingTargetPage = null; // Store where the user wanted to go
+
+    // 1. Select all sidebar navigation items EXCLUDING the focus toggle itself
+    const sidebarLinks = [
+        'overview-link', 
+        'analytics-link', 
+        'admin-link', 
+        'signin-link', 
+        'signup-link',
+        'profile-link', 
+        'add-task-sidebar-btn' 
+    ];
+
+    sidebarLinks.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('click', (e) => {
+                if (document.body.classList.contains('focus-mode-active')) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation(); 
+                    
+                    if (id === 'overview-link') pendingTargetPage = 'todo-page';
+                    else if (id === 'analytics-link') pendingTargetPage = 'analytics-page';
+                    else if (id === 'admin-link') pendingTargetPage = 'admin-page';
+                    else if (id === 'signin-link') pendingTargetPage = 'signin-page';
+                    else if (id === 'signup-link') pendingTargetPage = 'signup-page';
+                    else if (id === 'profile-link') pendingTargetPage = 'profile-page';
+                    else if (id === 'add-task-sidebar-btn') pendingTargetPage = 'task-modal';
+                    
+                    toggleModal('focus-exit-modal', 'open');
+                }
+            }, true); 
+        }
+    });
+
+    // 2. Handle Confirmation (Yes, Leave)
+    confirmExitBtn?.addEventListener('click', () => {
+        flushFocusStats(); // Final save before leaving
+
+        document.body.classList.remove('focus-mode-active');
+        const focusLink = document.getElementById('focus-mode-link');
+        if(focusLink) focusLink.classList.remove('active');
+        
+        const focusPage = document.getElementById('focus-mode-page');
+        if(focusPage) focusPage.classList.add('hide');
+
+        toggleModal('focus-exit-modal', 'close');
+
+        if (pendingTargetPage) {
+            if (pendingTargetPage === 'task-modal') {
+                showPage('todo-page'); 
+                openTaskModal();      
+            } else {
+                showPage(pendingTargetPage);
+            }
+        } else {
+            showPage('todo-page');
+        }
+        
+        document.body.classList.remove('bg-theme-active');
+        document.body.classList.forEach(cls => {
+            if (cls.startsWith('bg-')) document.body.classList.remove(cls);
+        });
+    });
+
+    // 3. Handle Cancellation (Stay Focused)
+    cancelExitBtn?.addEventListener('click', () => {
+        toggleModal('focus-exit-modal', 'close');
+        pendingTargetPage = null;
+    });
+
+    if (pomoCloseBtn) pomoCloseBtn.addEventListener('click', () => toggleModal('focus-pomodoro-modal', 'close'));

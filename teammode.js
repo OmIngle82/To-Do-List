@@ -1,7 +1,10 @@
 // --- DOM Elements --- //
 const teamControlsContainer = document.querySelector('.team-controls-container');
-const shareTasksBtn = document.getElementById('share-tasks-btn');
-const assignTasksBtn = document.getElementById('assign-tasks-btn');
+
+// FIX 1: Change 'const' to 'let' so we can update them when we clone elements
+let shareTasksBtn = document.getElementById('share-tasks-btn');
+let assignTasksBtn = document.getElementById('assign-tasks-btn');
+
 const shareTaskModal = document.getElementById('share-task-modal');
 const shareModalTitle = document.getElementById('share-modal-title');
 const shareTaskForm = document.getElementById('share-task-form');
@@ -11,6 +14,7 @@ const taskListViewForTeam = document.getElementById('task-list-view');
 const teamWelcomeModal = document.getElementById('team-welcome-modal');
 const startTeamModeBtn = document.getElementById('start-team-mode-btn');
 const welcomeUserName = document.getElementById('welcome-user-name');
+
 let shareModalFeedback;
 if (shareTaskForm) {
     shareModalFeedback = document.createElement('p');
@@ -34,26 +38,51 @@ const assignButtonHandler = () => {
 };
 
 // --- Main Team Mode Functions --- //
-// In teammode.js
 
 function initTeamMode() {
     if (currentUser && displayNameInput) {
         welcomeUserName.textContent = `Welcome, ${displayNameInput.value || 'User'}!`;
     }
     teamWelcomeModal.classList.remove('hide');
+    
+    // Setup Start Button
+    startTeamModeBtn.removeEventListener('click', handleStartTeamMode); 
     startTeamModeBtn.addEventListener('click', handleStartTeamMode, { once: true });
-    taskListViewForTeam.addEventListener('change', handleSelectionCheckboxChange);
-    shareTaskForm.addEventListener('submit', handleSendFormSubmit);
-    cancelShareBtn.addEventListener('click', closeSendModal);
-}
 
-// In teammode.js
+    // Setup Form Listeners
+    taskListViewForTeam.removeEventListener('change', handleSelectionCheckboxChange);
+    taskListViewForTeam.addEventListener('change', handleSelectionCheckboxChange);
+    
+    shareTaskForm.removeEventListener('submit', handleSendFormSubmit);
+    shareTaskForm.addEventListener('submit', handleSendFormSubmit);
+    
+    cancelShareBtn.removeEventListener('click', closeSendModal);
+    cancelShareBtn.addEventListener('click', closeSendModal);
+
+    // --- FIX 2: Correctly update global variables after cloning ---
+    const shareBtn = document.getElementById('share-tasks-btn');
+    const assignBtn = document.getElementById('assign-tasks-btn');
+
+    if (shareBtn) {
+        const newShare = shareBtn.cloneNode(true);
+        shareBtn.parentNode.replaceChild(newShare, shareBtn);
+        newShare.addEventListener('click', shareButtonHandler);
+        shareTasksBtn = newShare; // Update global reference
+    }
+
+    if (assignBtn) {
+        const newAssign = assignBtn.cloneNode(true);
+        assignBtn.parentNode.replaceChild(newAssign, assignBtn);
+        newAssign.addEventListener('click', assignButtonHandler);
+        assignTasksBtn = newAssign; // Update global reference
+    }
+}
 
 function tearDownTeamMode() {
     teamControlsContainer.classList.add('hide');
 
-    shareTasksBtn.removeEventListener('click', shareButtonHandler);
-    assignTasksBtn.removeEventListener('click', assignButtonHandler);
+    if (shareTasksBtn) shareTasksBtn.removeEventListener('click', shareButtonHandler);
+    if (assignTasksBtn) assignTasksBtn.removeEventListener('click', assignButtonHandler);
 
     if (teamModeActive) {
         toggleSelectionMode(null); // Reset selection state
@@ -71,11 +100,6 @@ function handleStartTeamMode() {
     teamControlsContainer.classList.remove('hide');
     teamModeActive = true;
 
-    shareTasksBtn.removeEventListener('click', shareButtonHandler);
-    assignTasksBtn.removeEventListener('click', assignButtonHandler);
-    shareTasksBtn.addEventListener('click', shareButtonHandler);
-    assignTasksBtn.addEventListener('click', assignButtonHandler);
-
     if (!document.getElementById('send-tasks-btn')) {
         sendTasksBtn = document.createElement('button');
         sendTasksBtn.id = 'send-tasks-btn';
@@ -83,42 +107,64 @@ function handleStartTeamMode() {
         teamControlsContainer.prepend(sendTasksBtn);
         sendTasksBtn.addEventListener('click', openSendModal);
     }
+    
     listenForTeamTasks();
 }
 
 function listenForTeamTasks() {
     if (!currentUser) return;
     if (unsubscribeTeamTasks) unsubscribeTeamTasks();
-    unsubscribeTeamTasks = db.collection('users').doc(currentUser.uid).collection('tasks').orderBy('order', 'asc')
-        .onSnapshot(snapshot => {
-            allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            renderAll();
-        });
+    // No specific listener needed as we use the main task list.
+    // We rely on the UI toggle logic to show/hide functionality.
 }
 
 function toggleSelectionMode(action) {
     const isCancelling = currentTeamAction === action;
-    shareTasksBtn.classList.remove('active');
-    assignTasksBtn.classList.remove('active');
+    
+    // Remove active class from BOTH buttons using current DOM references
+    if(shareTasksBtn) shareTasksBtn.classList.remove('active');
+    if(assignTasksBtn) assignTasksBtn.classList.remove('active');
+    
     currentTeamAction = isCancelling ? null : action;
+    
     if (currentTeamAction) {
-        document.getElementById(`${currentTeamAction}-tasks-btn`).classList.add('active');
+        const activeBtn = document.getElementById(`${currentTeamAction}-tasks-btn`);
+        if(activeBtn) activeBtn.classList.add('active');
     }
+    
     toggleSelectionCheckboxesVisibility(!isCancelling, currentTeamAction);
     tasksToProcess.clear();
     updateSendButtonVisibility();
 }
 
 function toggleSelectionCheckboxesVisibility(show, action) {
-    taskListViewForTeam.querySelectorAll('.task-item').forEach(item => {
+    // FIX 3: Updated selector to match the new class 'task-row-modern'
+    taskListViewForTeam.querySelectorAll('.task-row-modern').forEach(item => {
         const taskId = item.dataset.id;
-        const task = allTasks.find(t => t.id === taskId);
+        const task = typeof allTasks !== 'undefined' ? allTasks.find(t => t.id === taskId) : null;
+        
         const checkboxWrapper = item.querySelector('.share-checkbox-wrapper');
+        
         if (checkboxWrapper) {
             const isEligible = task && !task.sharedBy && !task.assignedBy && !task.assignedTo;
+            
             if (show && isEligible) {
                 const colorVar = action === 'assign' ? 'var(--assign-color)' : 'var(--team-color)';
-                checkboxWrapper.innerHTML = `<input type="checkbox" class="share-checkbox" data-task-id="${taskId}" style="accent-color: ${colorVar};">`;
+                
+                // FIX 4: Added onclick="event.stopPropagation()" to prevent opening modal
+                // Also added dynamic style injection to ensure correct color (Teal vs Indigo)
+                checkboxWrapper.innerHTML = `
+                    <input type="checkbox" 
+                           class="share-checkbox" 
+                           data-task-id="${taskId}" 
+                           onclick="event.stopPropagation()">
+                    <style>
+                        .share-checkbox[data-task-id="${taskId}"]:checked {
+                            background-color: ${colorVar} !important;
+                            border-color: ${colorVar} !important;
+                        }
+                    </style>
+                `;
             } else {
                 checkboxWrapper.innerHTML = '';
             }
@@ -128,6 +174,9 @@ function toggleSelectionCheckboxesVisibility(show, action) {
 
 function handleSelectionCheckboxChange(e) {
     if (!e.target.matches('.share-checkbox')) return;
+    // Extra safety: stop propagation here too
+    e.stopPropagation();
+    
     const taskId = e.target.dataset.taskId;
     if (e.target.checked) tasksToProcess.add(taskId);
     else tasksToProcess.delete(taskId);
@@ -138,14 +187,35 @@ function updateSendButtonVisibility() {
     if (!sendTasksBtn) return;
     const hasSelection = tasksToProcess.size > 0;
     sendTasksBtn.classList.toggle('hide', !hasSelection);
+    
     if (hasSelection) {
         const actionText = currentTeamAction.charAt(0).toUpperCase() + currentTeamAction.slice(1);
-        sendTasksBtn.innerHTML = `<i class="fas fa-paper-plane"></i> ${actionText} ${tasksToProcess.size} Task(s)`;
-        const colorVar = `var(--${currentTeamAction === 'assign' ? 'assign-color' : 'team-color'})`;
-        sendTasksBtn.style.backgroundColor = colorVar;
+        
+        // NEW: Inject the SVG Structure for the animation
+        sendTasksBtn.innerHTML = `
+          <div class="svg-wrapper-1">
+            <div class="svg-wrapper">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                <path fill="none" d="M0 0h24v24H0z"></path>
+                <path fill="currentColor" d="M1.946 9.315c-.522-.174-.527-.455.01-.634l19.087-6.362c.529-.176.832.12.684.638l-5.454 19.086c-.15.529-.455.547-.679.045L12 14l6-8-8 6-8.054-2.685z"></path>
+              </svg>
+            </div>
+          </div>
+          <span>${actionText} ${tasksToProcess.size} Task(s)</span>
+        `;
+        
+        // Dynamic background update based on action
+        if (currentTeamAction === 'assign') {
+             // Teal Gradient for Assign
+             sendTasksBtn.style.background = 'linear-gradient(to bottom, #0D9488 0%, #2DD4BF 100%)';
+        } else {
+             // Brand Gradient for Share
+             sendTasksBtn.style.background = 'var(--brand-gradient)';
+        }
     }
 }
 
+// ... (Rest of the file remains unchanged) ...
 function showShareFeedback(message, type) {
     if (shareModalFeedback) {
         shareModalFeedback.textContent = message;
@@ -188,40 +258,32 @@ async function handleSendFormSubmit(e) {
     submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending...`;
 
     try {
-        // --- CALL THE NEW CLOUD FUNCTION ---
         const shareOrAssignFunction = firebase.functions().httpsCallable('shareOrAssignTasks');
         const result = await shareOrAssignFunction({
             recipientEmail: recipientEmail,
-            taskIds: Array.from(tasksToProcess), // Convert Set to Array
-            action: currentTeamAction // 'share' or 'assign'
+            taskIds: Array.from(tasksToProcess),
+            action: currentTeamAction
         });
-        // --- END OF FUNCTION CALL ---
 
-        // Check result from the function
         if (result.data.success) {
             showShareFeedback(result.data.message || `Successfully sent ${tasksToProcess.size} task(s)!`, 'success');
             setTimeout(() => {
                 closeSendModal();
-                toggleSelectionMode(null); // Reset selection UI
-                // No need to manually update lists, Firestore listener will handle it
+                toggleSelectionMode(null); 
             }, 1500);
         } else {
-            // This case might not happen if function throws errors, but good to have
              throw new Error(result.data.message || 'Function reported failure.');
         }
 
     } catch (error) {
         console.error(`Error calling shareOrAssignTasks for '${currentTeamAction}':`, error);
-        // Display specific error messages from the Cloud Function
         let feedbackMessage = 'An error occurred. Please try again.';
         if (error.message) {
-            feedbackMessage = error.message; // Show the specific error (e.g., limit reached)
+            feedbackMessage = error.message; 
         }
         showShareFeedback(feedbackMessage, 'error');
     } finally {
-        // Always re-enable the button
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalBtnText;
     }
 }
-

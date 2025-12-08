@@ -5,9 +5,7 @@ service cloud.firestore {
 
     // --- USER & TASK RULES ---
     match /users/{userId} {
-      // Allows any signed-in user to 'get' any user's profile.
       allow get, list: if request.auth.uid != null;
-      // A user can only create or update their own profile.
       allow create, update: if request.auth.uid == userId;
 
       match /tasks/{taskId} {
@@ -15,20 +13,24 @@ service cloud.firestore {
         // Rules for sharing/assigning tasks
         allow create: if request.auth.uid != null &&
                       request.auth.uid != userId &&
-                      // NEW: Check if the person SENDING the task is a premium user
                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.status == 'premium' &&
                       (request.resource.data.sharedBy.uid == request.auth.uid ||
                       request.resource.data.assignedBy.uid == request.auth.uid);
         allow update: if request.auth.uid != null &&
                       request.auth.uid != userId &&
-                      request.auth.uid == resource.data.assignedTo.uid && // User is the assignee
-                      resource.data.assignedTo.status == 'pending' && // Old status must be 'pending'
-                      request.resource.data.assignedTo.status == 'completed' && // New status must be 'completed'
-                      request.resource.data.assignedTo.completedAt != null && // A 'completed' timestamp must be set
-                      // Check that nothing else on the task was changed
+                      request.auth.uid == resource.data.assignedTo.uid && 
+                      resource.data.assignedTo.status == 'pending' && 
+                      request.resource.data.assignedTo.status == 'completed' && 
+                      request.resource.data.assignedTo.completedAt != null && 
                       request.resource.data.text == resource.data.text &&
                       request.resource.data.priority == resource.data.priority &&
                       request.resource.data.category == resource.data.category;
+      }
+
+      // --- NEW: FOCUS STATS RULES ---
+      // Allows users to read/write their own daily focus stats
+      match /focus_stats/{dateId} {
+         allow read, write: if request.auth.uid == userId;
       }
     }
 
@@ -53,10 +55,8 @@ service cloud.firestore {
 
     // --- SLACK INTEGRATION RULES ---
     match /slackIntegrations/{slackId} {
-      // Allow a logged-in user to create a document linking their own account.
       allow write: if request.auth.uid != null &&
                     request.resource.data.firestoreUserId == request.auth.uid &&
-                    // NEW: Check if the user linking their account is premium
                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.status == 'premium';
     }
     match /system_analytics/{docId} {

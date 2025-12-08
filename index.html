@@ -6,55 +6,164 @@
     <title>Task Management App</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 
+    <!-- NEW: Global Animated Background Wrapper (Hidden by default) -->
+    <div id="global-points-wrapper" class="global-points-wrapper hide">
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+        <i class="point"></i>
+    </div>
     <div class="site-wrapper">
-        <header class="app-header">
-            <div class="header-left">
-                <button id="back-btn" class="back-btn hide"><i class="fas fa-arrow-left"></i></button>
-                <h1 class="logo"><i class="fa-solid fa-list-check"></i> Task Manager</h1>
-            </div>
-            <nav class="navigation">
-                <a href="#" id="signin-link" class="nav-link">Sign In</a>
-                <a href="#" id="signup-link" class="nav-link">Sign Up</a>
-                <div id="profile-menu" class="profile-menu hide">
-                    <div id="menuProfilePhotoContainer" class="profile-photo-wrapper">
-                        <img src="https://placehold.co/40x40/EFEFEF/333?text=P" alt="Profile" id="menu-profile-photo" class="menu-profile-photo">
-                    </div>
-                    <div class="profile-dropdown">
-                        <a href="#" id="profile-link" class="dropdown-link">View Profile</a>
-                        <a href="#" id="analytics-link" class="dropdown-link">Analytics</a>
-                        <a href="#" id="admin-link" class="dropdown-link hide">Admin Panel</a>
-                        <a href="#" id="logout-btn" class="dropdown-link">Sign Out</a>
-                    </div>
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">
+                <div class="logo-icon">
+                    <i class="fas fa-sparkles"></i>
                 </div>
+                <h1 class="brand-text">TASKMATE</h1>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" id="overview-link" onclick="showPage('todo-page')" class="nav-item active">
+                    <i class="fas fa-th-large"></i> <span>Overview</span>
+                </a>
+                <a href="#" id="analytics-link" class="nav-item">
+                    <i class="fas fa-chart-pie"></i> <span>Analytics</span>
+                </a>
+                <a href="#" id="admin-link" class="nav-item hide">
+                    <i class="fas fa-shield-alt"></i> <span>Admin Panel</span>
+                </a>
+                
+                <a href="#" id="focus-mode-link" class="nav-item">
+                    <i class="fas fa-stopwatch"></i> <span>Focus Mode</span>
+                </a>
+
+                <div id="team-mode-container" class="team-toggle-container hide">
+                    <label class="liquid-switch">
+                        <input type="checkbox" id="team-mode-toggle"> 
+                        
+                        <div class="liquid-bg"></div>
+                        
+                        <div class="liquid-content">
+                            <span class="mode-text simple">Personal</span>
+                            
+                            <span class="mode-icon">
+                                <i class="fas fa-user" id="icon-simple"></i>
+                                <i class="fas fa-users" id="icon-team"></i>
+                            </span>
+                            
+                            <span class="mode-text team">Team</span>
+                        </div>
+                    </label>
+                </div>
+                
+                <div id="auth-links">
+                    <a href="#" id="signin-link" class="nav-item">
+                        <i class="fas fa-sign-in-alt"></i> <span>Sign In</span>
+                    </a>
+                    <a href="#" id="signup-link" class="nav-item">
+                        <i class="fas fa-user-plus"></i> <span>Sign Up</span>
+                    </a>
+                </div>
+
+                <button id="add-task-sidebar-btn" class="create-project-btn">
+                    <i class="fas fa-folder-plus"></i> <span>New Task</span>
+                </button>
             </nav>
-        </header>
+
+            <div id="profile-menu" class="sidebar-footer hide">
+                <div class="user-profile-card">
+                    <div id="menuProfilePhotoContainer" class="profile-photo-wrapper small">
+                        <img src="default-user.png" alt="User" id="menu-profile-photo">
+                    </div>
+                    <div class="user-info">
+                        <span class="user-name">My Account</span>
+                        <span class="user-role">Free Plan</span>
+                    </div>
+                    <i class="fas fa-cog settings-icon" id="profile-link"></i>
+                </div>
+                <div class="mini-dropdown">
+                    <a href="#" id="logout-btn">Sign Out</a>
+                </div>
+            </div>
+        </aside>
 
         <main class="app-container">
-            <section id="signin-page" class="page">
-                <h2 class="form-title">Sign In</h2>
-                <p id="signin-feedback" class="feedback"></p>
-                <form id="signin-form" class="auth-form">
-                    <input type="email" id="signin-email" placeholder="Email" required>
-                    <input type="password" id="signin-password" placeholder="Password" required>
-                    <button type="submit" class="auth-btn">Sign In</button>
-                    <p class="auth-switch">Don't have an account? <a href="#" id="show-signup">Sign Up</a></p>
-                </form>
-            </section>
+            <div id="auth-wrapper" class="auth-wrapper hide">
+                <div class="auth-card-container">
+                    <div class="auth-card-3d" id="auth-card-3d">
+                        
+                        <section class="auth-face auth-front">
+                            <div class="auth-brand-header">
+                                <i class="fas fa-sparkles"></i>
+                                <h1>TASKMATE</h1>
+                            </div>
+                            <h2 class="form-title">Welcome Back</h2>
+                            <p id="signin-feedback" class="feedback"></p>
+                            
+                            <form id="signin-form" class="auth-form">
+                                <div class="form-group">
+                                    <label for="signin-email" class="auth-label">Email Address</label>
+                                    <input type="email" id="signin-email" placeholder="name@example.com" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="signin-password" class="auth-label">Password</label>
+                                    <input type="password" id="signin-password" placeholder="Enter your password" required>
+                                </div>
 
-            <section id="signup-page" class="page hide">
-                <h2 class="form-title">Sign Up</h2>
-                <p id="signup-feedback" class="feedback"></p>
-                <form id="signup-form" class="auth-form">
-                    <input type="email" id="signup-email" placeholder="Choose an Email" required>
-                    <input type="password" id="signup-password" placeholder="Choose a Password" required>
-                    <button type="submit" class="auth-btn">Sign Up</button>
-                    <p class="auth-switch">Already have an account? <a href="#" id="show-signin">Sign In</a></p>
-                </form>
-            </section>
+                                <button type="submit" class="auth-btn">Sign In</button>
+                                
+                                <p class="auth-switch">
+                                    Don't have an account? 
+                                    <a href="#" id="trigger-flip-signup">Sign Up</a>
+                                </p>
+                            </form>
+                        </section>
+
+                        <section class="auth-face auth-back">
+                            <div class="auth-brand-header">
+                                <i class="fas fa-sparkles"></i>
+                                <h1>TASKMATE</h1>
+                            </div>
+                            <h2 class="form-title">Create Account</h2>
+                            <p id="signup-feedback" class="feedback"></p>
+                            
+                            <form id="signup-form" class="auth-form">
+                                <div class="form-group">
+                                    <label for="signup-email" class="auth-label">Email Address</label>
+                                    <input type="email" id="signup-email" placeholder="Choose your email" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="signup-password" class="auth-label">Password</label>
+                                    <input type="password" id="signup-password" placeholder="Choose a strong password" required>
+                                </div>
+
+                                <button type="submit" class="auth-btn">Sign Up</button>
+                                
+                                <p class="auth-switch">
+                                    Already have an account? 
+                                    <a href="#" id="trigger-flip-signin">Sign In</a>
+                                </p>
+                            </form>
+                        </section>
+
+                    </div>
+                </div>
+            </div>
             
             <section id="profile-page" class="page hide">
                 <h2 class="form-title">Profile Settings</h2>
@@ -62,7 +171,7 @@
                 <form id="profile-form">
                     <div class="profile-photo-section">
                         <div id="profilePhotoContainer" class="profile-photo-wrapper">
-                            <img src="https://placehold.co/100x100/EFEFEF/333?text=Photo" alt="Profile photo preview" id="profile-photo-preview" class="profile-photo-preview">
+                            <img src="default-user.png" alt="Profile photo preview" id="profile-photo-preview" class="profile-photo-preview">
                         </div>
                         <input type="file" id="profile-photo-input" accept="image/*">
                         <label for="profile-photo-input" class="photo-upload-btn">Change Photo</label>
@@ -75,37 +184,96 @@
                         <input type="text" id="profile-name" placeholder="Enter your name">
                     </div>
 
-                    <div class="settings-section">
-                        <h3>Statistics</h3>
-                        <div class="stats-container">
-                            <div class="stat-card"><h4>Total</h4><p id="stat-total">0</p></div>
-                            <div class="stat-card"><h4>Pending</h4><p id="stat-pending">0</p></div>
-                            <div class="stat-card"><h4>Completed</h4><p id="stat-completed">0</p></div>
-                            <div class="stat-card"><h4>Productivity</h4><p id="stat-score">0%</p></div>
+                    <div class="settings-section premium-stats-card">
+                        <h3><i class="fas fa-chart-pie"></i> Your Productivity</h3>
+                        
+                        <div class="productivity-wrapper">
+                            <div class="prod-header">
+                                <span class="prod-label">Overall Score</span>
+                                <span id="stat-score" class="prod-percent">0%</span>
+                            </div>
+                            <div class="progress-track">
+                                <div id="prod-bar-fill" class="progress-fill"></div>
+                            </div>
+                        </div>
+
+                        <div class="mini-stats-grid">
+                            <div class="mini-stat">
+                                <span class="ms-label">Total</span>
+                                <span id="stat-total" class="ms-value">0</span>
+                            </div>
+                            <div class="mini-stat">
+                                <span class="ms-label">Pending</span>
+                                <span id="stat-pending" class="ms-value">0</span>
+                            </div>
+                            <div class="mini-stat">
+                                <span class="ms-label">Done</span>
+                                <span id="stat-completed" class="ms-value">0</span>
+                            </div>
                         </div>
                     </div>
 
                     <div class="settings-section">
-                        <h3>Appearance</h3>
-                        <div class="form-group">
-                            <label>Theme</label>
-                            <div class="theme-switcher">
-                                <span>Light</span>
-                                <label class="switch"><input type="checkbox" id="theme-toggle"><span class="slider round"></span></label>
-                                <span>Dark</span>
+                        <h3><i class="fas fa-palette"></i> Appearance</h3>
+                        
+                        <div class="form-group toggle-row">
+                            <label>Dark Mode</label>
+                            
+                            <div class="toggle-scale-wrapper">
+                                <div class="wrapper">
+                                    <input type="checkbox" id="theme-toggle">
+                                    <label for="theme-toggle" class="toggle">
+                                        <span class="toggle-button">
+                                            <span class="crater crater-1"></span>
+                                            <span class="crater crater-2"></span>
+                                            <span class="crater crater-3"></span>   
+                                            <span class="crater crater-4"></span>
+                                            <span class="crater crater-5"></span>
+                                            <span class="crater crater-6"></span>
+                                            <span class="crater crater-7"></span>
+                                        </span>
+                                        <span class="star star-1"></span>
+                                        <span class="star star-2"></span>
+                                        <span class="star star-3"></span>
+                                        <span class="star star-4"></span>
+                                        <span class="star star-5"></span>
+                                        <span class="star star-6"></span>
+                                        <span class="star star-7"></span>
+                                        <span class="star star-8"></span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
+
                         <div class="form-group">
                             <label>Accent Color</label>
                             <div id="accent-color-picker" class="color-picker"></div>
                         </div>
-                        <div class="form-group">
-                            <label>Color Palette</label>
-                            <div id="palette-switcher" class="layout-switcher">
-                                <label><input type="radio" name="palette" value="default" checked> Default</label>
-                                <label><input type="radio" name="palette" value="ocean"> Ocean</label>
-                                <label><input type="radio" name="palette" value="sakura"> Sakura</label>
-                            </div>
+                        <div class="form-group" style="margin-top: 1.5rem;">
+                            <label>Background Style</label>
+                            <button type="button" id="animated-bg-btn" class="button">
+                                <span class="fold"></span>
+                                
+                                <div class="points_wrapper">
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                    <i class="point"></i>
+                                </div>
+                                
+                                <span class="inner">
+                                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5">
+                                        <polyline points="13.18 1.37 13.18 9.64 21.45 9.64 10.82 22.63 10.82 14.36 2.55 14.36 13.18 1.37"></polyline>
+                                    </svg>
+                                    Enable Galactic Mode
+                                </span>
+                            </button>
                         </div>
                     </div>
 
@@ -214,7 +382,25 @@
                         <div id="achievements-container">
                         </div>
                     </div>
-                    <button type="submit" class="auth-btn">Save Profile</button>
+                    <button type="submit" id="save-profile-btn" class="flower-btn">
+                        <div class="flower-wrapper">
+                            <p class="flower-text">Save Profile</p>
+
+                            <div class="flower flower1"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower2"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower3"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower4"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower5"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower6"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            
+                            <div class="flower flower7"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower8"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower9"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower10"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower11"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                            <div class="flower flower12"><div class="petal one"></div><div class="petal two"></div><div class="petal three"></div><div class="petal four"></div></div>
+                        </div>
+                    </button>
                 </form>
             </section>
            <section id="analytics-page" class="page hide">
@@ -232,7 +418,7 @@
                     </div>
             </section>
             <section id="admin-page" class="page hide">
-                <h2 class="form-title">Admin Panel</h2>
+                <h2 class="form-title admin-welcome-title">Admin Panel</h2>
 
                 <div class="admin-nav">
                     <button id="admin-nav-users" class="admin-nav-btn active" data-target="admin-users-content">
@@ -246,12 +432,14 @@
                 <div id="admin-users-content" class="admin-content-panel">
                     <div class="settings-section">
                         <h3>User Management</h3>
-                        <div id="admin-user-filters" class="filters">
-                            <button class="filter-btn active" data-filter="all">All Users</button>
-                            <button class="filter-btn" data-filter="admin">Admins</button>
-                            <button class="filter-btn" data-filter="premium">Premium Users</button>
-                            <button class="filter-btn" data-filter="free">Free Users</button>
+                        
+                        <div id="admin-user-filters">
+                            <button class="glass-filter-btn active" data-filter="all">All Users</button>
+                            <button class="glass-filter-btn" data-filter="admin">Admins</button>
+                            <button class="glass-filter-btn" data-filter="premium">Premium</button>
+                            <button class="glass-filter-btn" data-filter="free">Free</button>
                         </div>
+
                         <div id="user-list-container">
                             <p>Loading users...</p>
                         </div>
@@ -261,9 +449,7 @@
                 <div id="admin-analytics-content" class="admin-content-panel hide">
                     <div class="settings-section">
                         <h3>Usage Analytics</h3>
-                        <div id="analytics-container">
-                            <p>Loading analytics data...</p>
-                        </div>
+                        <div id="analytics-container"></div>
                     </div>
                 </div>
             </section>
@@ -298,71 +484,515 @@
                 </div>
             </div>
             <section id="todo-page" class="page hide">
-                <div class="todo-header">
-                    <div class="top-bar">
-                        <div class="search-wrapper">
-                             <i class="fas fa-search"></i>
-                            <input type="text" id="search-input" placeholder="Search tasks by name, category...">
+                <div class="project-hero-card">
+                    <div class="hero-content">
+                        <div class="hero-brand-icon" style="overflow: hidden; background: transparent; border: 2px solid rgba(255,255,255,0.5);">
+                            <img id="header-profile-img" src="default-user.png" alt="User" style="width: 100%; height: 100%; object-fit: cover;">                        </div>
+                        
+                        <div class="hero-text">
+                            <h1 id="header-greeting">Hello, User</h1>
+                            <p>What do you plan to do today?</p>
                         </div>
-                        <div class="add-task-controls">
-                            <button id="voice-add-btn" class="icon-btn" title="Add Task with Voice"><i class="fas fa-microphone"></i></button>
-                            <button id="add-task-btn" class="add-task-btn"><i class="fas fa-plus"></i> Add Task</button>
-                        </div>
-                    </div>
-
-                    <div class="mode-toggle-container">
-                        <label class="mode-toggle">
-                            <input type="checkbox" id="mode-toggle-checkbox">
-                            <div class="slider">
-                                <span class="label simple">Simple</span>
-                                <span class="label team">Team</span>
+                        
+                        <div class="hero-stats">
+                            <div class="stat-item">
+                                <span class="label">TODAY</span>
+                                <span class="value" id="header-date">--</span>
                             </div>
-                        </label>
-                    </div>
-                    
-                    <div class="filters-container">
-                        <div class="main-filters">
-                            <div class="filters" id="status-filters">
-                                <button class="filter-btn active" data-filter="all">All</button>
-                                <button class="filter-btn" data-filter="pending">Pending</button>
-                                <button class="filter-btn" data-filter="completed">Completed</button>
-                            </div>
-                            <div class="filters" id="priority-filters">
-                                <button class="filter-btn active" data-priority="all">All Priorities</button>
-                                <button class="filter-btn" data-priority="high">High</button>
-                                <button class="filter-btn" data-priority="medium">Medium</button>
-                                <button class="filter-btn" data-priority="low">Low</button>
-                            </div>
-                             <div class="date-filter-wrapper">
-                                <input type="text" id="date-filter-input" placeholder="Filter by date...">
-                                <button id="clear-date-filter" class="clear-btn hide">&times;</button>
-                            </div>
-                        </div>
-                         <div class="list-controls">
-                            <div id="category-filters" class="category-filters"></div>
-                            <button id="export-btn" class="settings-btn" title="Export Tasks">
-                                <i class="fas fa-file-export"></i> Export
-                            </button>
-                            <div class="team-controls-container hide">
-                                <button id="assign-tasks-btn" title="Assign Tasks">
-                                    <i class="fas fa-user-plus"></i> Assign
-                                </button>
-                                <button id="share-tasks-btn" title="Share Tasks">
-                                    <i class="fas fa-share-alt"></i> Share
-                                </button>
+                            <div class="stat-item">
+                                <span class="label">CURRENT TIME</span>
+                                <span class="value" id="header-time">--:--</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <ul id="task-list-view" class="task-view"></ul>
-                <div id="task-board-view" class="task-view hide"></div>
-                <div id="calendar-view" class="task-view hide"></div>
 
+                <div class="dashboard-controls-area">
+    
+                    <div class="dashboard-search expanded-search">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" id="search-input" placeholder="Search your tasks...">
+                        <button id="voice-search-btn" class="voice-search-btn" title="Voice Search">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                    </div>
+
+                    <div id="layout-switcher-dashboard" class="view-switcher">
+                        <label class="view-btn">
+                            <input type="radio" name="layout" value="board" checked>
+                            <i class="fas fa-columns"></i>
+                        </label>
+                        <label class="view-btn">
+                            <input type="radio" name="layout" value="list">
+                            <i class="fas fa-list"></i>
+                        </label>
+                        <label class="view-btn">
+                            <input type="radio" name="layout" value="calendar">
+                            <i class="fas fa-calendar"></i>
+                        </label>
+                    </div>
+
+                    <div class="action-buttons-group">
+                        <button id="trigger-export-btn" class="secondary-action-btn" title="Export Tasks">
+                            <i class="fas fa-file-export"></i>
+                        </button>
+                        
+                        <button id="add-task-btn" class="add-task-primary">
+                            <i class="fas fa-plus"></i> New Task
+                        </button>
+                    </div>
+
+                </div>
+                
+                <div class="filters-section-wrapper">
+                    <div class="filters-bar-secondary">
+                        <div class="filters-left">
+                            <div class="filters" id="status-filters">
+                                <button class="filter-text-btn active" data-filter="all">All Tasks</button>
+                                <button class="filter-text-btn" data-filter="pending">Pending</button>
+                                <button class="filter-text-btn" data-filter="completed">Done</button>
+                            </div>
+                            
+                            <div class="filter-separator"></div>
+
+                            <button id="advanced-filter-toggle" class="filter-text-btn toggle-btn">
+                                <i class="fas fa-sliders-h"></i> Filters
+                                <span id="active-filter-count" class="filter-count hide">0</span>
+                            </button>
+                        </div>
+
+                        <div class="team-controls-container hide">
+                            <button id="assign-tasks-btn" class="team-action-btn" title="Assign Tasks">
+                                <i class="fas fa-user-plus"></i>
+                                <span>Assign</span>
+                            </button>
+                            <button id="share-tasks-btn" class="team-action-btn" title="Share Tasks">
+                                <i class="fas fa-share-alt"></i>
+                                <span>Share</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="advanced-filters-panel" class="advanced-filters-panel hide">
+                        <div class="advanced-filters-grid">
+                            
+                            <div class="filter-group">
+                                <span class="filter-label">Priority</span>
+                                <div id="priority-filters" class="pill-filters">
+                                    <button class="pill-btn active" data-priority="all">Any</button>
+                                    <button class="pill-btn" data-priority="high">High</button>
+                                    <button class="pill-btn" data-priority="medium">Medium</button>
+                                    <button class="pill-btn" data-priority="low">Low</button>
+                                </div>
+                            </div>
+
+                            <div class="filter-group">
+                                <span class="filter-label">Category</span>
+                                <div id="category-filters" class="pill-filters">
+                                    </div>
+                            </div>
+                            
+                            <div class="filter-group">
+                                <span class="filter-label">Date</span>
+                                <div class="date-filter-wrapper">
+                                    <input type="text" id="date-filter-input" placeholder="Pick a date">
+                                    <button id="clear-date-filter" class="clear-btn hide">&times;</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tasks-container-area">
+                    <ul id="task-list-view" class="task-view hide"></ul>
+                    <div id="task-board-view" class="task-view"></div> <div id="calendar-view" class="task-view hide"></div>
+                </div>
+
+            </section>
+            <section id="focus-mode-page" class="page hide">
+
+                <div class="focus-nav-container">
+                    <nav class="focus-glass-bar">
+                        <button class="focus-icon-btn theme-btn" data-target="focus-theme" title="Themes">
+                            <i class="far fa-image"></i>
+                        </button>
+                        
+                        <button class="focus-icon-btn animation-btn" data-target="focus-animation" title="Animations">
+                           <i class="fas fa-cloud"></i>
+                        </button>
+                        
+                        <button class="focus-icon-btn stopwatch-btn" data-target="focus-stopwatch" title="Stopwatch">
+                            <i class="fas fa-business-time"></i>
+                        </button>
+
+                        <button class="focus-icon-btn pomodoro-btn active" data-target="focus-pomodoro" title="Pomodoro">
+                            <i class="fas fa-clock"></i>
+                        </button>
+                        
+                        <button class="focus-icon-btn music-btn" data-target="focus-music" title="Sounds">
+                            <i class="fas fa-music"></i>
+                        </button>
+
+                        <button class="focus-icon-btn stats-btn" data-target="focus-stats" title="Statistics">
+                            <i class="fas fa-chart-simple"></i>
+                        </button>
+                    </nav>
+                </div>
             </section>
         </main>
     </div>
+    <!-- NEW: Focus Mode Theme Selection Modal -->
+    <div id="focus-theme-modal" class="modal-overlay hide">
+        <div class="modal-content theme-modal-content">
+            <div class="detail-modal-header">
+                <h2 class="form-title" style="margin:0; text-align:left;">Select Background</h2>
+                <button id="close-theme-modal" class="detail-close-btn">&times;</button>
+            </div>
+            
+            <div class="theme-grid">
+                <!-- Option 1: (Default) -->
+                <div class="theme-option active" data-bg="Default">
+                    <div class="theme-preview no-bg">
+                        <img src="beautiful-anime-landscape-cartoon-scene.jpg" alt="Default">
+                    </div>
+                    <span>Default</span>
+                </div>
 
+                <!-- Option 2: Lo-Fi Room -->
+                <div class="theme-option" data-bg="Lofi-Room">
+                    <div class="theme-preview">
+                        <img src="10922448.png" alt="Lofi-Room">
+                    </div>
+                    <span>Lofi-Room</span>
+                </div>
+
+                <!-- Option 3: Anime Night Sky -->
+                <div class="theme-option" data-bg="Anime Night Sky">
+                    <div class="theme-preview">
+                        <img src="anime-night-sky-illustration.jpg" alt="Anime Night Sky">
+                    </div>
+                    <span>Anime Night Sky</span>
+                </div>
+
+                <!-- Option 4: City Views -->
+                <div class="theme-option" data-bg="City Views">
+                    <div class="theme-preview">
+                        <img src="beautiful-office-space-cartoon-style.jpg" alt="City Views">
+                    </div>
+                    <span>City Views</span>
+                </div>
+
+                 <!-- Option 5: Anime Sunset -->
+                 <div class="theme-option" data-bg="Anime Sunset">
+                    <div class="theme-preview">
+                         <img src="Sunset Anime Art Clouds Sky Scenery 4k Wallpaper iPhone HD Phone.jpg" alt="Anime Sunset">
+                    </div>
+                    <span>Anime Sunset</span>
+                </div>
+
+                 <!-- Option 6: Anime Night Street -->
+                 <div class="theme-option" data-bg="Anime Night Street">
+                    <div class="theme-preview">
+                        <img src="wp6333916-anime-aesthetic-night-wallpapers.jpg" alt="Anime Night Street">
+                    </div>
+                    <span>Anime Night Street</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- NEW: Animation Selection Modal -->
+    <div id="focus-animation-modal" class="modal-overlay hide">
+        <div class="modal-content animation-modal-content">
+            <div class="detail-modal-header">
+                <h2 class="form-title" style="margin:0; text-align:left;">Visual Effects</h2>
+                <button id="close-animation-modal" class="detail-close-btn">&times;</button>
+            </div>
+            
+            <div class="animation-options-container">
+                
+                <!-- Option 1: Galactic Mode -->
+                <div class="animation-row">
+                    <div class="anim-info">
+                        <h3>Galactic Mode</h3>
+                        <p>Falling stars and deep space vibes.</p>
+                    </div>
+                    <div class="checkbox-wrapper-5">
+                        <div class="check">
+                            <input id="toggle-galactic" type="checkbox">
+                            <label for="toggle-galactic"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Option 2: Snow -->
+                <div class="animation-row">
+                    <div class="anim-info">
+                        <h3>Gentle Snow</h3>
+                        <p>Soft falling snowflakes.</p>
+                    </div>
+                    <div class="checkbox-wrapper-5">
+                        <div class="check">
+                            <input id="toggle-snow" type="checkbox">
+                            <label for="toggle-snow"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Option 3: Rain -->
+                <div class="animation-row">
+                    <div class="anim-info">
+                        <h3>City Rain</h3>
+                        <p>Heavy rain shower effect.</p>
+                    </div>
+                    <div class="checkbox-wrapper-5">
+                        <div class="check">
+                            <input id="toggle-rain" type="checkbox">
+                            <label for="toggle-rain"></label>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <div id="focus-stopwatch-modal" class="modal-overlay hide">
+        <div class="modal-content stopwatch-modal-content">
+            <div class="detail-modal-header">
+                <h2 class="form-title" style="margin:0; text-align:left;">Stopwatch</h2>
+                <button id="close-stopwatch-modal" class="detail-close-btn">&times;</button>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 2rem; padding: 1rem 0;">
+                <div id="stopwatch-display" style="font-size: 4rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 2px; text-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                    00:00:00
+                </div>
+
+                <div style="display: flex; gap: 1.5rem;">
+                    <button id="sw-start-btn" style="width: 60px; height: 60px; border-radius: 50%; border: none; background: white; color: #4D7CFE; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: transform 0.2s;">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    
+                    <button id="sw-reset-btn" style="width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); background: transparent; color: white; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                        <i class="fas fa-redo-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="focus-pomodoro-modal" class="modal-overlay hide">
+        <div class="modal-content pomodoro-modal-content">
+            <div class="detail-modal-header">
+                <h2 class="form-title" style="margin:0; text-align:left;">Pomodoro Focus</h2>
+                <button id="close-pomodoro-modal" class="detail-close-btn">&times;</button>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 0.5rem 0;">
+                
+                <div class="pomodoro-mode-switcher">
+                    <button class="pomo-mode-btn active" data-mode="focus">Focus</button>
+                    <button class="pomo-mode-btn" data-mode="short">Break</button>
+                </div>
+
+                <div class="timer-main-row">
+                    
+                    <div class="side-toggle-wrapper pomo-hide-on-run">
+                        <span>Auto Break</span>
+                        <div class="checkbox-wrapper-5" style="transform: scale(0.55); transform-origin: center;">
+                            <div class="check">
+                                <input id="auto-start-break-toggle" type="checkbox">
+                                <label for="auto-start-break-toggle"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="pomodoro-display">25:00</div>
+
+                    <div class="side-toggle-wrapper pomo-hide-on-run">
+                        <span>Auto Focus</span>
+                        <div class="checkbox-wrapper-5" style="transform: scale(0.55); transform-origin: center;">
+                            <div class="check">
+                                <input id="auto-start-focus-toggle" type="checkbox">
+                                <label for="auto-start-focus-toggle"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div style="display: flex; gap: 1.5rem; position: relative; z-index: 5;">
+                    <button id="pomo-start-btn" style="width: 60px; height: 60px; border-radius: 50%; border: none; background: white; color: #4D7CFE; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: transform 0.2s;">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    
+                    <button id="pomo-reset-btn" style="width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); background: transparent; color: white; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                        <i class="fas fa-redo-alt"></i>
+                    </button>
+                </div>
+
+                <div id="pomo-settings-area" class="pomo-settings-wrapper pomo-hide-on-run">
+                    <div style="width: 100%; height: 1px; background: rgba(255,255,255,0.1); margin: 0.5rem 0;"></div>
+
+                    <div class="pomo-settings-grid">
+                        <div class="pomo-setting-col">
+                            <label>Focus (min)</label>
+                            <div class="custom-number-input">
+                                <button class="time-btn minus" data-target="pomo-input-focus"><i class="fas fa-minus"></i></button>
+                                <input type="number" id="pomo-input-focus" value="25" min="1" max="60" readonly>
+                                <button class="time-btn plus" data-target="pomo-input-focus"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="pomo-setting-col">
+                            <label>Break (min)</label>
+                            <div class="custom-number-input">
+                                <button class="time-btn minus" data-target="pomo-input-short"><i class="fas fa-minus"></i></button>
+                                <input type="number" id="pomo-input-short" value="5" min="1" max="30" readonly>
+                                <button class="time-btn plus" data-target="pomo-input-short"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="focus-music-modal" class="modal-overlay hide">
+        <div class="modal-content music-modal-content">
+            <div class="detail-modal-header">
+                <h2 class="form-title" style="margin:0; text-align:left;">Soundscapes & Alerts</h2>
+                <button id="close-music-modal" class="detail-close-btn">&times;</button>
+            </div>
+            
+            <div class="music-body">
+                
+                <div class="sound-section">
+                    <h3><i class="fas fa-bell"></i> Timer Alerts</h3>
+                    
+                    <div class="sound-toggle-row">
+                        <div class="st-label">
+                            <span>Stopwatch Hourly Chime</span>
+                            <small>Beep every 1 hour</small>
+                        </div>
+                        <div class="checkbox-wrapper-5" style="transform: scale(0.6);">
+                            <div class="check">
+                                <input id="sound-toggle-stopwatch" type="checkbox">
+                                <label for="sound-toggle-stopwatch"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sound-toggle-row">
+                        <div class="st-label">
+                            <span>Focus Session End</span>
+                            <small>Sound when work timer finishes</small>
+                        </div>
+                        <div class="checkbox-wrapper-5" style="transform: scale(0.6);">
+                            <div class="check">
+                                <input id="sound-toggle-pomo-focus" type="checkbox" checked>
+                                <label for="sound-toggle-pomo-focus"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sound-toggle-row">
+                        <div class="st-label">
+                            <span>Break Time End</span>
+                            <small>Sound when break is over</small>
+                        </div>
+                        <div class="checkbox-wrapper-5" style="transform: scale(0.6);">
+                            <div class="check">
+                                <input id="sound-toggle-pomo-break" type="checkbox" checked>
+                                <label for="sound-toggle-pomo-break"></label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-divider"></div>
+
+                <div class="sound-section">
+                    <h3><i class="fas fa-headphones"></i> Ambient Atmosphere</h3>
+                    <div class="ambient-grid">
+                        <button class="ambient-card" data-sound="rain">
+                            <i class="fas fa-cloud-showers-heavy"></i>
+                            <span>Rain</span>
+                        </button>
+                        <button class="ambient-card" data-sound="wind">
+                            <i class="fas fa-wind"></i>
+                            <span>Wind</span>
+                        </button>
+                        <button class="ambient-card" data-sound="forest">
+                            <i class="fas fa-tree"></i>
+                            <span>Forest</span>
+                        </button>
+                        <button class="ambient-card" data-sound="lofi">
+                            <i class="fas fa-music"></i>
+                            <span>Lo-Fi</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <div id="focus-stats-modal" class="modal-overlay hide">
+        <div class="modal-content stats-modal-content">
+            <div class="detail-modal-header">
+                <h2 class="form-title" style="margin:0; text-align:left;">Focus Insights</h2>
+                <button id="close-stats-modal" class="detail-close-btn">&times;</button>
+            </div>
+            
+            <div class="stats-body-grid">
+                
+                <div class="stats-left-col">
+                    <div class="focus-ring-container">
+                        <svg class="progress-ring" width="140" height="140">
+                            <circle class="progress-ring__circle-bg" stroke="#ffffff1a" stroke-width="10" fill="transparent" r="60" cx="70" cy="70"/>
+                            <circle id="focus-circle-progress" class="progress-ring__circle" stroke="#4D7CFE" stroke-width="10" fill="transparent" r="60" cx="70" cy="70"/>
+                        </svg>
+                        <div class="focus-time-text">
+                            <span id="today-total-time" style="font-size: 1.5rem;">0h 0m</span>
+                            <small>Today</small>
+                        </div>
+                    </div>
+                    
+                    <div class="stats-cards-row">
+                        <div class="mini-stat-card">
+                            <span class="m-label">Yesterday</span>
+                            <span id="yesterday-total-time" class="m-value">0h 0m</span>
+                        </div>
+                        <div class="mini-stat-card">
+                            <span class="m-label">Streak</span>
+                            <span id="focus-streak" class="m-value">0 Days</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-right-col">
+                    <h3><i class="fas fa-chart-line"></i> Activity Trend</h3>
+                    <p class="chart-subtitle">Focus minutes (Yesterday vs Today)</p>
+                    <div class="focus-chart-wrapper">
+                        <canvas id="focus-trend-chart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <div id="focus-exit-modal" class="modal-overlay hide">
+        <div class="modal-content exit-modal-content">
+            <div class="exit-icon-wrapper">
+                <i class="fas fa-door-open"></i>
+            </div>
+            <h2>Leave Focus Mode?</h2>
+            <p>You are about to exit your focused session. Are you sure you want to leave?</p>
+            
+            <div class="modal-actions exit-actions">
+                <button id="cancel-exit-btn" class="modal-btn">Stay Focused</button>
+                <button id="confirm-exit-btn" class="modal-btn">Yes, Leave</button>
+            </div>
+        </div>
+    </div>
+</div>
     <section id="link-slack-page" class="page hide">
         <h2 class="form-title">Link Your Slack Account</h2>
         <p id="link-slack-feedback" class="feedback" style="margin-bottom: 1rem;"></p>
@@ -445,8 +1075,13 @@
     <div id="task-detail-modal" class="modal-overlay hide">
         <div class="modal-content">
             <div class="detail-modal-header">
-                <h2 id="detail-task-title-full">Task Details</h2>
-                <button id="detail-close-btn" class="detail-close-btn">&times;</button>
+                <div class="detail-header-content">
+                    <h2 id="detail-task-title-full">Task Details</h2>
+                    <div id="detail-meta-tags" class="task-tags-row"></div>
+                </div>
+                <button id="detail-close-btn" class="detail-close-btn" title="Close">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             
             <div class="detail-modal-body">
@@ -492,12 +1127,17 @@
 
     <div id="share-task-modal" class="modal-overlay hide">
          <div class="modal-content">
-            <h2 id="share-modal-title">Share Selected Tasks</h2>
-            <p>Enter the email address of the user you want to share these tasks with.</p>
+            <h2 id="share-modal-title" class="form-title">Share Tasks</h2>
+            <p style="text-align: center; margin-bottom: 1.5rem; color: var(--text-secondary);">
+                Enter the email address of the team member.
+            </p>
             <form id="share-task-form">
                 <div class="form-group">
                     <label for="share-email-input">Recipient's Email</label>
-                    <input type="email" id="share-email-input" placeholder="teammate@example.com" required>
+                    <div class="input-with-icon">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" id="share-email-input" placeholder="teammate@example.com" required>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" id="cancel-share-btn" class="modal-btn cancel-btn">Cancel</button>
@@ -519,16 +1159,30 @@
         </div>
     </div>
     <div id="export-modal" class="modal-overlay hide">
-    <div class="modal-content">
-        <h2 class="form-title">Export Tasks</h2>
-        <p style="text-align: center; margin-bottom: 2rem;">Choose a format to download your currently filtered tasks.</p>
-        <div class="modal-actions export-options" style="justify-content: center;">
-            <button id="export-csv-btn" class="modal-btn">Export as CSV</button>
-            <button id="export-pdf-btn" class="modal-btn">Export as PDF</button>
-            <button id="export-excel-btn" class="modal-btn">Export as Excel</button>
-        </div>
-        <div class="modal-actions" style="justify-content: center; margin-top: 1rem;">
-             <button id="cancel-export-btn" class="modal-btn cancel-btn">Cancel</button>
+        <div class="modal-content">
+            <h2 class="form-title">Export Data</h2>
+            <p style="text-align: center; color: var(--text-secondary); margin-bottom: 2rem;">
+                Select a format to download your tasks.
+            </p>
+            
+            <div class="export-grid">
+                <button id="export-csv-btn" class="export-card">
+                    <div class="export-icon csv"><i class="fas fa-file-csv"></i></div>
+                    <span>CSV File</span>
+                </button>
+                <button id="export-pdf-btn" class="export-card">
+                    <div class="export-icon pdf"><i class="fas fa-file-pdf"></i></div>
+                    <span>PDF Document</span>
+                </button>
+                <button id="export-excel-btn" class="export-card">
+                    <div class="export-icon excel"><i class="fas fa-file-excel"></i></div>
+                    <span>Excel Sheet</span>
+                </button>
+            </div>
+
+            <div class="modal-actions" style="justify-content: center; margin-top: 2rem;">
+                 <button id="cancel-export-btn" class="modal-btn cancel-btn">Cancel</button>
+            </div>
         </div>
     </div>
 </div>
