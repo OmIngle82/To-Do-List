@@ -1,7 +1,7 @@
 {
   "name": "TaskMate Productivity",
   "short_name": "TaskMate",
-  "start_url": "./index.html", 
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#F4F7FC",
   "theme_color": "#4D7CFE",
@@ -9,14 +9,44 @@
   "scope": ".",
   "icons": [
     {
-      "src": "taskmate-logo.jpg",
+      "src": "taskmate-logo.png",
       "sizes": "192x192",
-      "type": "image/jpeg"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "default-user.jpg",
+      "src": "taskmate-logo.png",
       "sizes": "512x512",
-      "type": "image/jpeg"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "taskmate-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "taskmate-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "social-preview.jpg",
+      "sizes": "1193x630",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Desktop Dashboard"
+    },
+    {
+      "src": "social-preview.jpg",
+      "sizes": "1193x630",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Mobile Dashboard"
     }
   ]
 }

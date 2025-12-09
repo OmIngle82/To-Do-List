@@ -8,21 +8,25 @@
     <meta name="title" content="TaskMate | Focus, Track & Collaborate">
     <meta name="description" content="A powerful productivity tool with Focus Mode, Team Collaboration, and Advanced Analytics. Manage tasks efficiently.">
     <meta name="theme-color" content="#4D7CFE">
+    <link rel="icon" type="image/png" href="taskmate-logo.png">
 
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="taskmate-logo.jpg">
+    <link rel="apple-touch-icon" href="taskmate-logo.png">
 
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://to-do-list-app-b322d.web.app/">
     <meta property="og:title" content="TaskMate | Focus & Collaborate">
     <meta property="og:description" content="Boost your productivity with Focus Mode, Team Mode, and Smart Analytics.">
-    <meta property="og:image" content="social-preview.jpg">
+    <meta property="og:image" content="https://to-do-list-app-b322d.web.app/social-preview.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1193">
+    <meta property="og:image:height" content="630">
 
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://to-do-list-app-b322d.web.app/">
     <meta property="twitter:title" content="TaskMate | Focus & Collaborate">
     <meta property="twitter:description" content="Boost your productivity with Focus Mode, Team Mode, and Smart Analytics.">
-    <meta property="twitter:image" content="social-preview.jpg">
+    <meta property="twitter:image" content="https://to-do-list-app-b322d.web.app/social-preview.jpg">
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -139,7 +143,7 @@
             <div id="profile-menu" class="sidebar-footer hide">
                 <div class="user-profile-card">
                     <div id="menuProfilePhotoContainer" class="profile-photo-wrapper small">
-                        <img src="default-user.png" alt="User" id="menu-profile-photo">
+                        <img src="default-user.jpg" alt="User" id="menu-profile-photo">
                     </div>
                     <div class="user-info">
                         <span class="user-name">My Account</span>
@@ -224,7 +228,7 @@
                 <form id="profile-form">
                     <div class="profile-photo-section">
                         <div id="profilePhotoContainer" class="profile-photo-wrapper">
-                            <img src="default-user.png" alt="Profile photo preview" id="profile-photo-preview" class="profile-photo-preview">
+                            <img src="default-user.jpg" alt="Profile photo preview" id="profile-photo-preview" class="profile-photo-preview">
                         </div>
                         <input type="file" id="profile-photo-input" accept="image/*">
                         <label for="profile-photo-input" class="photo-upload-btn">Change Photo</label>
@@ -540,7 +544,7 @@
                 <div class="project-hero-card">
                     <div class="hero-content">
                         <div class="hero-brand-icon" style="overflow: hidden; background: transparent; border: 2px solid rgba(255,255,255,0.5);">
-                            <img id="header-profile-img" src="default-user.png" alt="User" style="width: 100%; height: 100%; object-fit: cover;">                        </div>
+                            <img id="header-profile-img" src="default-user.jpg" alt="User" style="width: 100%; height: 100%; object-fit: cover;">                        </div>
                         
                         <div class="hero-text">
                             <h1 id="header-greeting">Hello, User</h1>
@@ -1265,7 +1269,6 @@
     <script src="script.js"></script>
     <script src="ai-suggestions.js"></script>
     <script src="teammode.js"></script>
-    <script src="voice-feature.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
     <script src="https://unpkg.com/jspdf-autotable@3.5.23/dist/jspdf.plugin.autotable.js"></script>

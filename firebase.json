@@ -18,5 +18,24 @@
         "*.local"
       ]
     }
-  ]
+  ],
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "functions/**",
+      "firestore.rules",
+      "firestore.indexes.json",
+      "storage.rules",
+      "*.log",
+      "package.json",
+      "package-lock.json",
+      "README.md",
+      ".firebase/**",   
+      ".git/**",
+      ".vscode/**"
+    ]
+  }
 }

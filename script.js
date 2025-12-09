@@ -302,7 +302,7 @@ const applyUserPreferences = (prefs = {}) => {
 
     // Apply theme and palette
     document.body.classList.toggle('dark-theme', userPreferences.theme === 'dark');
-    
+
     // Save to local storage for the skeleton loader next time
     localStorage.setItem('localTheme', userPreferences.theme);
     // ---------------------
@@ -4757,3 +4757,13 @@ updateDashboardClock(); // Initial call
     });
 
     if (pomoCloseBtn) pomoCloseBtn.addEventListener('click', () => toggleModal('focus-pomodoro-modal', 'close'));
+
+    // --- PWA Service Worker Registration ---
+    if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+            navigator.serviceWorker
+                .register("sw.js") // Points to your new file
+                .then((reg) => console.log("Service Worker Registered!", reg))
+                .catch((err) => console.log("Service Worker Failed:", err));
+        });
+    }
