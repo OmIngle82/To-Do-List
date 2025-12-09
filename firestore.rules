@@ -3,65 +3,126 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- USER & TASK RULES ---
-    match /users/{userId} {
-      allow get, list: if request.auth.uid != null;
-      allow create, update: if request.auth.uid == userId;
+    // --- HELPER FUNCTIONS ---
+    
+    // Check if user is logged in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Check if the user is accessing their own data
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Check if the user is an Admin (reads from their DB profile)
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Validate Task Data (Prevent massive strings or fake priorities)
+    function isValidTask() {
+      let task = request.resource.data;
+      return task.text is string && task.text.size() > 0 && task.text.size() < 500 &&
+             (!('priority' in task) || task.priority in ['low', 'medium', 'high']) &&
+             (!('status' in task) || task.status in ['todo', 'inprogress', 'completed']);
+    }
 
+    // --- USERS COLLECTION ---
+    match /users/{userId} {
+      // 1. Reading Profiles
+      // Allow single document read (needed for Team/Comments to show names)
+      allow get: if isSignedIn();
+      // BLOCK listing all users unless you are an Admin (Prevents data dumping)
+      allow list: if isAdmin();
+
+      // 2. Creating Profile (Sign Up)
+      // User can create their profile, but MUST set role to 'user' (cannot grant themselves admin)
+      allow create: if isOwner(userId) &&
+                    (!('role' in request.resource.data) || request.resource.data.role == 'user') &&
+                    (!('subscription' in request.resource.data) || request.resource.data.subscription.status != 'premium');
+
+      // 3. Updating Profile
+      allow update: if isOwner(userId) &&
+                    // SECURITY: Prevent user from changing their own Role or Subscription
+                    (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+                    (!('subscription' in request.resource.data) || request.resource.data.subscription == resource.data.subscription) &&
+                    // SECURITY: Prevent user from unbanning themselves
+                    (!('status' in request.resource.data) || request.resource.data.status == resource.data.status);
+
+      // --- TASKS SUBCOLLECTION ---
       match /tasks/{taskId} {
-        allow read, write: if request.auth.uid == userId;
-        // Rules for sharing/assigning tasks
-        allow create: if request.auth.uid != null &&
+        // Owner has full control
+        allow read, delete: if isOwner(userId);
+        
+        // Owner can create/update ONLY if data is valid
+        allow create: if isOwner(userId) && isValidTask();
+        allow update: if isOwner(userId) && isValidTask();
+
+        // --- TEAM MODE: SHARING ---
+        // Allow creating a task in another user's folder IF:
+        // 1. Creator is Premium
+        // 2. Creator marks themselves as sharedBy or assignedBy
+        allow create: if isSignedIn() &&
                       request.auth.uid != userId &&
                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.status == 'premium' &&
                       (request.resource.data.sharedBy.uid == request.auth.uid ||
-                      request.resource.data.assignedBy.uid == request.auth.uid);
-        allow update: if request.auth.uid != null &&
+                       request.resource.data.assignedBy.uid == request.auth.uid);
+
+        // --- TEAM MODE: ASSIGNEE UPDATES ---
+        // Allow assignee to complete the task ONLY (cannot change title/priority)
+        allow update: if isSignedIn() &&
                       request.auth.uid != userId &&
                       request.auth.uid == resource.data.assignedTo.uid && 
                       resource.data.assignedTo.status == 'pending' && 
-                      request.resource.data.assignedTo.status == 'completed' && 
-                      request.resource.data.assignedTo.completedAt != null && 
+                      request.resource.data.assignedTo.status == 'completed' &&
+                      // Lock down other fields
                       request.resource.data.text == resource.data.text &&
-                      request.resource.data.priority == resource.data.priority &&
-                      request.resource.data.category == resource.data.category;
+                      request.resource.data.priority == resource.data.priority;
       }
 
-      // --- NEW: FOCUS STATS RULES ---
-      // Allows users to read/write their own daily focus stats
+      // --- FOCUS STATS (For Charts) ---
       match /focus_stats/{dateId} {
-         allow read, write: if request.auth.uid == userId;
+         allow read, write: if isOwner(userId);
       }
     }
 
-    // --- RULES FOR TASK CONVERSATIONS & COMMENTS ---
+    // --- CONVERSATIONS & COMMENTS ---
     match /task_conversations/{conversationId} {
-      allow create: if request.auth.uid in request.resource.data.authorizedUsers;
-      allow read, update: if request.auth.uid in resource.data.authorizedUsers;
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.authorizedUsers;
+      allow read, update: if isSignedIn() && request.auth.uid in resource.data.authorizedUsers;
       
       match /comments/{commentId} {
-        allow list, get: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers;
-        allow create: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers &&
-                       request.resource.data.authorId == request.auth.uid;
+        allow list, get: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers;
+        // Validate Comment Length
+        allow create: if isSignedIn() && 
+                      request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers &&
+                      request.resource.data.authorId == request.auth.uid &&
+                      request.resource.data.text is string &&
+                      request.resource.data.text.size() < 1000;
       }
 
       match /updates/{updateId} {
-        allow read: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers;
-        allow create: if request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers
-                       && request.resource.data.updatedBy.uid == request.auth.uid;
-        allow update, delete: if request.auth.uid == resource.data.updatedBy.uid;
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers;
+        allow create: if isSignedIn() && 
+                      request.auth.uid in get(/databases/$(database)/documents/task_conversations/$(conversationId)).data.authorizedUsers && 
+                      request.resource.data.updatedBy.uid == request.auth.uid;
       }
     }
 
-    // --- SLACK INTEGRATION RULES ---
+    // --- SLACK INTEGRATION ---
     match /slackIntegrations/{slackId} {
-      allow write: if request.auth.uid != null &&
+      allow write: if isSignedIn() &&
                     request.resource.data.firestoreUserId == request.auth.uid &&
                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.status == 'premium';
     }
+
+    // --- SYSTEM ANALYTICS ---
     match /system_analytics/{docId} {
-      allow read: if request.auth.token.role == 'admin';
-      allow write: if false;
+      // Only Admins can see system-wide stats
+      allow read: if isSignedIn() && isAdmin();
+      // NO ONE can write to this (Only Cloud Functions can)
+      allow write: if false; 
     }
   }
 }
